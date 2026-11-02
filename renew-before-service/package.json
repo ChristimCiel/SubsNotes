@@ -1,0 +1,26 @@
+{
+  "name": "renew-before-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local subscription evidence, Gmail reconciliation and read-only assistant tools without hosted infrastructure.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "audit": "node scripts/audit.mjs",
+    "start": "node src/server.mjs",
+    "mcp": "node src/mcp.mjs",
+    "package:mcpb": "node scripts/package-mcpb.mjs",
+    "sample": "node scripts/sample.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.4.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.4.0"
+  },
+  "license": "MIT"
+}

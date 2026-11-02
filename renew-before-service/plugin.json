@@ -1,0 +1,6 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "renew-before",
+  "version": "0.1.0",
+  "description": "Review subscription, cancellation and payment evidence using your assistant's connected Gmail. No hosted database or paid API dependency."
+}

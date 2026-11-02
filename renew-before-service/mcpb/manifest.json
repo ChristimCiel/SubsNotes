@@ -1,0 +1,39 @@
+{
+  "name": "renew-before",
+  "display_name": "SubsNotes \u00b7 Evidence Reader (Preview)",
+  "version": "0.1.0",
+  "description": "Read your local subscription, cancellation and payment evidence in Claude. No hosted database or paid API.",
+  "long_description": "Engineering preview: reads a previously generated private Gmail evidence report. Gmail scanning and automatic updates require separate setup and are not enabled by installing this reader.",
+  "author": {
+    "name": "SubsNotes contributors"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "src/mcp.mjs",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/src/mcp.mjs"
+      ],
+      "env": {
+        "RENEW_BEFORE_DATA_DIR": "${user_config.data_directory}"
+      }
+    }
+  },
+  "user_config": {
+    "data_directory": {
+      "type": "directory",
+      "title": "Your private evidence folder",
+      "description": "Select the folder containing your snapshot.json and evidence.json. The reader cannot browse other folders.",
+      "required": true
+    }
+  },
+  "compatibility": {
+    "runtimes": {
+      "node": ">=22.0.0"
+    }
+  },
+  "tools_generated": true,
+  "license": "MIT",
+  "manifest_version": "0.3"
+}

@@ -1,0 +1,13 @@
+From: Billing <billing@example.invalid>
+To: Subscriber <subscriber@example.invalid>
+Subject: Example Studio subscription details (fictional receipt)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 7bit
+
+Service: Example Studio
+Recurring amount: USD 12.50
+Billing cycle: Monthly
+Next billing date: 2030-05-12
+
+This fictional message is a sample for local import.

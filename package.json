@@ -1,0 +1,19 @@
+{
+  "name": "subsnotes",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "A local-first subscription management baseline with optional AI evidence tools.",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node renew-before-service/src/server.mjs --report .private/sample/review.html",
+    "sample": "npm --prefix renew-before-service run sample",
+    "demo": "npm --prefix renew-before-demo start",
+    "test": "npm run test:core && npm run test:demo",
+    "test:core": "npm --prefix renew-before-service test",
+    "test:demo": "npm --prefix renew-before-demo test",
+    "check:demo": "npm --prefix renew-before-demo run check",
+    "package:reader": "npm --prefix renew-before-service run package:mcpb"
+  }
+}

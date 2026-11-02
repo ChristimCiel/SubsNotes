@@ -1,0 +1,11 @@
+node_modules/
+.env*
+!.env.example
+.vercel/
+.private/
+*.sqlite*
+*.db*
+private-audit/
+coverage/
+dist/
+.vercel

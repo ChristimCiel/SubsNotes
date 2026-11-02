@@ -1,0 +1,185 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 77;
+	objects = {
+		FC4A695F02A8A53A129DCB9A /* App */ = {
+			isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = App; sourceTree = "<group>";
+		};
+		68836C550EE20FAE0E06B299 /* Core */ = {
+			isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Core; sourceTree = "<group>";
+		};
+		DF15305CC141D8294713EBA4 /* Widget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Widget; sourceTree = "<group>";
+		};
+		8C6E04368B049552D9241461 /* StoragePaths.swift */ = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Config/StoragePaths.swift; sourceTree = "<group>";
+		};
+		CF6B4C73DBD5B6C110939324 /* RenewBefore.icns */ = {
+			isa = PBXFileReference; lastKnownFileType = image.icns; path = Assets/RenewBefore.icns; sourceTree = "<group>";
+		};
+		CDF4A07510EED623489A2DAC /* Renew Before.app */ = {
+			isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Renew Before.app"; sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		177FBE5B14A06D9C4EA8D631 /* Storage Main */ = {
+			isa = PBXBuildFile; fileRef = 8C6E04368B049552D9241461 /* StoragePaths.swift */;
+		};
+		0FC97A076991A090E9529DCE /* Main Sources */ = {
+			isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (177FBE5B14A06D9C4EA8D631 /* Storage Main */, ); runOnlyForDeploymentPostprocessing = 0;
+		};
+		6CECD424A61C2D7B89DFFD56 /* Main Frameworks */ = {
+			isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;
+		};
+		68046E3431F0AB03D722DB28 /* Main Resources */ = {
+			isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (ABDE7A74C8A0F938AF007339 /* App icon */, ); runOnlyForDeploymentPostprocessing = 0;
+		};
+		8B5316A049FDBD8288C4744A /* RenewBeforeWidget.appex */ = {
+			isa = PBXFileReference; explicitFileType = wrapper.app-extension; includeInIndex = 0; path = "RenewBeforeWidget.appex"; sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		7602BE3CA58DFFFAB7EE4840 /* Storage Ext */ = {
+			isa = PBXBuildFile; fileRef = 8C6E04368B049552D9241461 /* StoragePaths.swift */;
+		};
+		7FADD494462614207C5D50F0 /* Ext Sources */ = {
+			isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (7602BE3CA58DFFFAB7EE4840 /* Storage Ext */, ); runOnlyForDeploymentPostprocessing = 0;
+		};
+		502097DABF331E72E7B21183 /* Ext Frameworks */ = {
+			isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;
+		};
+		EF3AC42255B051033FD4DD23 /* Ext Resources */ = {
+			isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;
+		};
+		ABDE7A74C8A0F938AF007339 /* App icon */ = {
+			isa = PBXBuildFile; fileRef = CF6B4C73DBD5B6C110939324 /* RenewBefore.icns */;
+		};
+		64C020DB3FE077EBFDF463A7 /* Widget embedding */ = {
+			isa = PBXBuildFile; fileRef = 8B5316A049FDBD8288C4744A /* RenewBeforeWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); };
+		};
+		BE489A7AE058B482CE15F25D /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase; buildActionMask = 2147483647; dstPath = ""; dstSubfolderSpec = 13; files = (64C020DB3FE077EBFDF463A7 /* Widget embedding */, ); name = "Embed App Extensions"; runOnlyForDeploymentPostprocessing = 0;
+		};
+		F2C9B6743B9EF5471BF6965E /* Target proxy */ = {
+			isa = PBXContainerItemProxy; containerPortal = F6F4DA8D93E88A08220E03B7 /* Project */; proxyType = 1; remoteGlobalIDString = 74653975DEAEE88D4B0D4BC9; remoteInfo = RenewBeforeWidget;
+		};
+		6F8349BF5AAD48F470548EEC /* Widget dependency */ = {
+			isa = PBXTargetDependency; target = 74653975DEAEE88D4B0D4BC9 /* Ext */; targetProxy = F2C9B6743B9EF5471BF6965E /* Target proxy */;
+		};
+		FE0A091FDBFB3E9C31B7A1BD /* Products */ = {
+			isa = PBXGroup; children = (CDF4A07510EED623489A2DAC /* Renew Before.app */, 8B5316A049FDBD8288C4744A /* RenewBeforeWidget.appex */, ); name = Products; sourceTree = "<group>";
+		};
+		E96857C58F716104CAEAD648 /* Root */ = {
+			isa = PBXGroup; children = (FC4A695F02A8A53A129DCB9A /* App */, 68836C550EE20FAE0E06B299 /* Core */, DF15305CC141D8294713EBA4 /* Widget */, 8C6E04368B049552D9241461 /* StoragePaths.swift */, CF6B4C73DBD5B6C110939324 /* RenewBefore.icns */, FE0A091FDBFB3E9C31B7A1BD /* Products */, ); sourceTree = "<group>";
+		};
+		40609A412964FFB79DAE9C3A /* Project Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_IDENTITY = "-";
+				REGISTER_APP_GROUPS = NO;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_VERSION = 5.0;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				DEBUG_INFORMATION_FORMAT = "dwarf";
+				ENABLE_HARDENED_RUNTIME = YES;
+				RENEW_STORAGE_MODE = Local;
+				MARKETING_VERSION = 0.7.0;
+				CURRENT_PROJECT_VERSION = 9;
+			}; name = Debug;
+		};
+		24B7DFA423B1C8A2130AE03E /* Project Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_IDENTITY = "-";
+				REGISTER_APP_GROUPS = NO;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_VERSION = 5.0;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_HARDENED_RUNTIME = YES;
+				RENEW_STORAGE_MODE = Local;
+				MARKETING_VERSION = 0.7.0;
+				CURRENT_PROJECT_VERSION = 9;
+			}; name = Release;
+		};
+		EA4CB304C2116E38EA8A7F98 /* Project configurations */ = {
+			isa = XCConfigurationList; buildConfigurations = (40609A412964FFB79DAE9C3A /* Project Debug */, 24B7DFA423B1C8A2130AE03E /* Project Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;
+		};
+		0BB19984044E33D3EDFFBF4F /* Main Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_NAME = "Renew Before";
+				PRODUCT_BUNDLE_IDENTIFIER = org.renewbefore.mac;
+				INFOPLIST_FILE = Config/App-Info.plist;
+				CODE_SIGN_ENTITLEMENTS = "Config/App$(RENEW_STORAGE_MODE).entitlements";
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				COMBINE_HIDPI_IMAGES = YES;
+			}; name = Debug;
+		};
+		6909051967C6700D680AB6C1 /* Main Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_NAME = "Renew Before";
+				PRODUCT_BUNDLE_IDENTIFIER = org.renewbefore.mac;
+				INFOPLIST_FILE = Config/App-Info.plist;
+				CODE_SIGN_ENTITLEMENTS = "Config/App$(RENEW_STORAGE_MODE).entitlements";
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				COMBINE_HIDPI_IMAGES = YES;
+			}; name = Release;
+		};
+		D504FBF038773E647CAE4BBD /* Main configurations */ = {
+			isa = XCConfigurationList; buildConfigurations = (0BB19984044E33D3EDFFBF4F /* Main Debug */, 6909051967C6700D680AB6C1 /* Main Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;
+		};
+		4A321DE962DA650699AE8F07 /* Ext Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_NAME = RenewBeforeWidget;
+				PRODUCT_BUNDLE_IDENTIFIER = org.renewbefore.mac.widget;
+				INFOPLIST_FILE = Config/Widget-Info.plist;
+				CODE_SIGN_ENTITLEMENTS = "Config/Widget$(RENEW_STORAGE_MODE).entitlements";
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks @executable_path/../../../../Frameworks";
+				SKIP_INSTALL = YES;
+				APPLICATION_EXTENSION_API_ONLY = YES;
+			}; name = Debug;
+		};
+		EA4D3765DEF64AC47394E2EA /* Ext Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_NAME = RenewBeforeWidget;
+				PRODUCT_BUNDLE_IDENTIFIER = org.renewbefore.mac.widget;
+				INFOPLIST_FILE = Config/Widget-Info.plist;
+				CODE_SIGN_ENTITLEMENTS = "Config/Widget$(RENEW_STORAGE_MODE).entitlements";
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks @executable_path/../../../../Frameworks";
+				SKIP_INSTALL = YES;
+				APPLICATION_EXTENSION_API_ONLY = YES;
+			}; name = Release;
+		};
+		F4A0E5A14BC21E5F33E3BE85 /* Ext configurations */ = {
+			isa = XCConfigurationList; buildConfigurations = (4A321DE962DA650699AE8F07 /* Ext Debug */, EA4D3765DEF64AC47394E2EA /* Ext Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;
+		};
+		62BCE9422FF2D14F69AB80A1 /* Main */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D504FBF038773E647CAE4BBD /* Main configurations */;
+			buildPhases = (0FC97A076991A090E9529DCE /* Main Sources */, 6CECD424A61C2D7B89DFFD56 /* Main Frameworks */, 68046E3431F0AB03D722DB28 /* Main Resources */, BE489A7AE058B482CE15F25D /* Embed App Extensions */, ); buildRules = (); dependencies = (6F8349BF5AAD48F470548EEC /* Widget dependency */, );
+			fileSystemSynchronizedGroups = (68836C550EE20FAE0E06B299 /* Core */, FC4A695F02A8A53A129DCB9A /* App */, ); name = RenewBefore; productName = RenewBefore; productReference = CDF4A07510EED623489A2DAC /* Renew Before.app */; productType = "com.apple.product-type.application";
+		};
+		74653975DEAEE88D4B0D4BC9 /* Ext */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F4A0E5A14BC21E5F33E3BE85 /* Ext configurations */;
+			buildPhases = (7FADD494462614207C5D50F0 /* Ext Sources */, 502097DABF331E72E7B21183 /* Ext Frameworks */, EF3AC42255B051033FD4DD23 /* Ext Resources */, ); buildRules = (); dependencies = ();
+			fileSystemSynchronizedGroups = (68836C550EE20FAE0E06B299 /* Core */, DF15305CC141D8294713EBA4 /* Widget */, ); name = RenewBeforeWidget; productName = RenewBeforeWidget; productReference = 8B5316A049FDBD8288C4744A /* RenewBeforeWidget.appex */; productType = "com.apple.product-type.app-extension";
+		};
+		F6F4DA8D93E88A08220E03B7 /* Project */ = {
+			isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 1600;}; buildConfigurationList = EA4CB304C2116E38EA8A7F98 /* Project configurations */; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = E96857C58F716104CAEAD648 /* Root */; minimizedProjectReferenceProxies = 1; preferredProjectObjectVersion = 77; productRefGroup = FE0A091FDBFB3E9C31B7A1BD /* Products */; projectDirPath = ""; projectRoot = ""; targets = (62BCE9422FF2D14F69AB80A1 /* Main */, 74653975DEAEE88D4B0D4BC9 /* Ext */, );
+		};
+	};
+	rootObject = F6F4DA8D93E88A08220E03B7 /* Project */;
+}

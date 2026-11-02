@@ -1,0 +1,12 @@
+.build/
+build/
+DerivedData/
+dist/
+.DS_Store
+xcuserdata/
+*.xcuserstate
+.swiftpm/
+
+# Publisher-supplied Google desktop OAuth configuration
+App/GmailDesktopClient.json
+client_secret*.json
