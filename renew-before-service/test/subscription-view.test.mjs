@@ -127,7 +127,7 @@ test('local filter, sort and language controls work without any host or persiste
   assert.equal(calendarDay.textContent,'Feb 1, 2026');
   assert.deepEqual(nodes['view-list'].children,[b,a,c]);
   assert.equal(c.hidden,true);assert.equal(nodes['view-state'].value,'current');
-  assert.equal(nodes['view-count'].textContent,'2 services · 1 likely canceled hidden');
+  assert.equal(nodes['view-count'].textContent,'2 services · 1 likely inactive hidden');
   nodes['view-scroll'].scrollTop=420;
   nodes['view-search'].value='beta'; nodes['view-search'].listeners.input();
   assert.equal(nodes['view-scroll'].scrollTop,0);
@@ -328,13 +328,25 @@ test('likely-canceled rows keep traceable dates, receipt totals and bilingual un
   const initial={...receipt('fictional-inference'),kind:'subscription_confirmed',receivedAt:'2026-04-01T00:00:00Z',nextBilling:'2026-05-01',payment:undefined};
   const snapshot=build([initial,receipt('fictional-paid',{receivedAt:'2026-04-01T00:00:00Z',paymentDay:'2026-04-01',cadence:'monthly'})]);
   const row=snapshot.rows[0];assert.equal(row.status,'likely_canceled');assert.equal(row.nextAction,'verify_inactive');
-  assert.equal(row.inactivityInference.expectedPaymentDay,'2026-05-01');assert.equal(row.inactivityInference.thresholdDay,'2026-07-01');
+  assert.equal(row.inactivityInference.expectedPaymentDay,'2026-05-01');assert.equal(row.inactivityInference.thresholdDay,'2026-06-30');
   assert.equal(row.inactivityInference.confirmed,false);assert.equal(row.inactivityInference.sourceEvidenceId,undefined);
   assert.deepEqual(snapshot.totals.paidMinorByCurrency,{USD:14400});
   for(const language of ['en','zh']) {
     const html=view.renderHTML(snapshot,{language});
-    assert.match(html,/Likely canceled/);assert.match(html,/可能已取消/);assert.match(html,/not confirmed cancellation/);assert.match(html,/並非確認取消/);
-    assert.match(html,/Email coverage may be incomplete/);assert.match(html,/2026-07-01/);assert.match(html,/value="likely_canceled"/);
+    assert.match(html,/Likely inactive/);assert.match(html,/可能已停用/);assert.match(html,/not confirmed cancellation/);assert.match(html,/並非確認取消/);
+    assert.match(html,/Email coverage may be incomplete/);assert.match(html,/2026-06-30/);assert.match(html,/value="likely_canceled"/);
     assert.match(html,/fictional-inference/);assert.match(html,/Last expected payment/);assert.match(html,/推測評估時間/);
+  }
+});
+
+test('status assessments expose controlled bilingual evidence strength and source links, never raw account details',()=>{
+  const fields={serviceKey:'fictional',service:'Fictional Music',category:'Software',authenticated:true};
+  const events=[{...fields,id:'warning',messageId:'fictional-warning',kind:'access_expiring',receivedAt:'2026-05-01T00:00:00Z',accessEnds:'2026-05-04'},
+    {...fields,id:'issue',messageId:'fictional-issue',kind:'payment_failed',receivedAt:'2026-05-03T00:00:00Z'}];
+  const snapshot=build(events),row=snapshot.rows[0];
+  assert.equal(row.statusAssessment.confidence,'moderate');assert.deepEqual(row.statusAssessment.signals.map(s=>s.messageIds),[['fictional-warning'],['fictional-issue']]);
+  assert.ok(!JSON.stringify(row.statusAssessment).includes('evidenceIds'));
+  for(const language of ['en','zh']){
+    const html=view.renderHTML(snapshot,{language});assert.match(html,/Evidence strength/);assert.match(html,/證據強度/);assert.match(html,/not a probability/);assert.match(html,/不是機率/);assert.match(html,/fictional-warning/);
   }
 });

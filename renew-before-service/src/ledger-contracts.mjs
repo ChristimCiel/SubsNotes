@@ -60,10 +60,27 @@ export function createLedgerContracts() {
     }
     return [...new Set(pieces)].join(' · ').slice(0,maxLength);
   }
+  function expandCheckpointMetadata(state) {
+    if (state.scannedIdsFormat == null) return state;
+    if (state.scannedIdsFormat !== 'processing-keys-v1' || !object(state.sourceProcessing)) throw new Error('Unsupported saved checkpoint format');
+    const ids=Object.keys(state.sourceProcessing).sort();
+    if(ids.some(id=>!/^[A-Za-z0-9_-]{1,200}$/.test(id)||['__proto__','constructor','prototype'].includes(id)))throw new Error('Invalid saved message identity');
+    if(state.scannedIds!=null&&(!Array.isArray(state.scannedIds)||state.scannedIds.length!==ids.length||new Set(state.scannedIds).size!==ids.length||state.scannedIds.some(id=>!Object.hasOwn(state.sourceProcessing,id))))throw new Error('Saved checkpoint identities disagree');
+    return {...state,scannedIds:ids};
+  }
+  function compactCheckpointMetadata(state) {
+    state=expandCheckpointMetadata(state);
+    const ids=state.scannedIds,keys=object(state.sourceProcessing)?Object.keys(state.sourceProcessing):[];
+    if(!Array.isArray(ids)||ids.length!==keys.length||new Set(ids).size!==ids.length||ids.some(id=>!Object.hasOwn(state.sourceProcessing,id)))return state;
+    const {scannedIds,...rest}=state;
+    const packed={...rest,scannedIdsFormat:'processing-keys-v1'};
+    expandCheckpointMetadata(packed);
+    return packed;
+  }
   function validateCanonicalState(input, {expectedMailboxHash = null, requireRevision = false} = {}) {
     const encoded = canonicalJSON(input);
     if (new TextEncoder().encode(encoded).length > 25_000_000) throw new Error('The ledger is too large');
-    const state = JSON.parse(encoded);
+    const state = expandCheckpointMetadata(JSON.parse(encoded));
     if (!object(state) || !Array.isArray(state.events) || state.events.length > 50_000 || (state.version != null && state.version !== 1)) throw new Error('Unsupported ledger schema');
     if (state.mailboxHash != null && !/^[a-f0-9]{64}$/.test(state.mailboxHash)) throw new Error('Invalid mailbox identity');
     if (expectedMailboxHash && state.mailboxHash !== expectedMailboxHash) throw new Error('The ledger belongs to a different mailbox');
@@ -142,5 +159,5 @@ export function createLedgerContracts() {
     return {state,requiresSourceRecheck:true,integrityVerified:true,sourceAuthenticityVerified:false};
   }
   const revisionContract = state => ({schemaVersion:1,revision:state?.storageRevision || null,legacySavedAt:state?.storageRevision ? null : state?.savedAt || null,persisted:Boolean(state?.storageRevision)});
-  return {canonicalJSON,billingExcerpt,validateCanonicalState,validateCandidate,createPortableExport,importPortableExport,revisionContract};
+  return {canonicalJSON,billingExcerpt,expandCheckpointMetadata,compactCheckpointMetadata,validateCanonicalState,validateCandidate,createPortableExport,importPortableExport,revisionContract};
 }

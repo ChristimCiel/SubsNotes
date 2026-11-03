@@ -74,3 +74,43 @@ test('a failed chunk integrity check does not advance the loaded revision',async
   await assert.rejects(store.save({events:[]}),/another tab/);
   f.docs.set('subsnotes-state-v1',before);assert.deepEqual((await store.load()).events,[{id:'saved'}]);
 });
+
+test('reopening uses bounded parallel reads; verified chunk reuse stays viewer-scoped and refresh can bypass it',async()=>{
+  const f=fixture(),writer=createClaudePersonalStore(f.db,'synthetic-viewer',f.options);await writer.load();
+  await writer.save({events:Array.from({length:8},(_,i)=>({id:'fiction-'+i,evidence:'a'.repeat(700)})),savedAt:'first'});
+  const base=f.db.collection;let active=0,maxActive=0,chunkReads=0;
+  f.db.collection=path=>{const c=base(path);return {doc:id=>{const ref=c.doc(id);return {...ref,get:async()=>{if(!id.startsWith('events-'))return ref.get();chunkReads++;active++;maxActive=Math.max(maxActive,active);await new Promise(resolve=>setImmediate(resolve));const value=await ref.get();active--;return value;}};}};};
+  const reader=createClaudePersonalStore(f.db,'synthetic-viewer',f.options),first=await reader.load();
+  assert.equal(first.events.length,8);assert.equal(chunkReads,8);assert.equal(maxActive,4);
+  first.events[0].evidence='edited-by-caller';const cached=await reader.load();
+  assert.equal(chunkReads,8);assert.equal(cached.events[0].evidence,'a'.repeat(700));
+  await reader.load({fresh:true});assert.equal(chunkReads,16);
+  const otherSession=createClaudePersonalStore(f.db,'synthetic-viewer',f.options);await otherSession.load();assert.equal(chunkReads,24);
+});
+
+test('a forced refresh detects corruption instead of trusting an old memory cache',async()=>{
+  const f=fixture(),store=createClaudePersonalStore(f.db,'synthetic-viewer',f.options);await store.load();
+  await store.save({events:[{id:'fiction'}],savedAt:'first'});await store.load();
+  const manifest=f.docs.get('subsnotes-state-v1'),key='events-'+manifest.eventChunks[0];
+  f.docs.set(key,{events:[{id:'corrupted'}]});await assert.rejects(store.load({fresh:true}),/did not match/);
+  assert.equal((await store.load()).events[0].id,'fiction');
+});
+
+test('checkpoint compaction preserves every message identity and processing record without dropping history',async()=>{
+  const f=fixture(),store=createClaudePersonalStore(f.db,'synthetic-viewer',f.options);await store.load();
+  const ids=Array.from({length:10},(_,i)=>'fictional-message-'+String(i).padStart(30,'0'));
+  const processing=Object.fromEntries(ids.map(id=>[id,['3','extracted',1,1,null,null]]));
+  const state={events:[],scannedIds:ids,sourceProcessing:processing,sourceProcessingFormat:'tuple-v1',savedAt:'first'};
+  assert.ok(new TextEncoder().encode(JSON.stringify({...state,storageFormat:'chunks-v1',eventChunks:[],storageRevision:'1'})).length>1200);
+  await store.save(state);const native=f.docs.get('subsnotes-state-v1');
+  assert.equal(native.scannedIds,undefined);assert.equal(native.scannedIdsFormat,'processing-keys-v1');
+  const loaded=await createClaudePersonalStore(f.db,'synthetic-viewer',f.options).load();
+  assert.deepEqual(new Set(loaded.scannedIds),new Set(ids));assert.deepEqual(loaded.sourceProcessing,processing);
+  assert.deepEqual(loaded.events,[]);
+});
+
+test('incomplete old checkpoints retain unmatched IDs instead of silently compacting them away',async()=>{
+  const f=fixture(),store=createClaudePersonalStore(f.db,'synthetic-viewer',f.options);await store.load();
+  await store.save({events:[],scannedIds:['known','not-yet-reprocessed'],sourceProcessing:{known:['2','extracted',1,1,null,null]}});
+  const native=f.docs.get('subsnotes-state-v1');assert.deepEqual(native.scannedIds,['known','not-yet-reprocessed']);assert.equal(native.scannedIdsFormat,undefined);
+});

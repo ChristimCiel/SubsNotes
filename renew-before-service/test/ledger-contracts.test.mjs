@@ -83,3 +83,12 @@ test('portable export guards corruption and schema but does not attest financial
   await assert.rejects(contracts.importPortableExport({...envelope,schemaVersion:2},{hash:digest}),/Unsupported/);
   await assert.rejects(contracts.importPortableExport(envelope,{hash:digest,expectedMailboxHash:digest('other')}),/mailbox/);
 });
+
+test('native checkpoint metadata expands losslessly and rejects inconsistent or forged identity encodings',()=>{
+  const contracts=createLedgerContracts();
+  const state={events:[],sourceProcessing:{'fictional-mail':['3','extracted',1,1,null,null]},scannedIds:['fictional-mail']};
+  const packed=contracts.compactCheckpointMetadata(state);assert.equal(packed.scannedIds,undefined);
+  assert.deepEqual(contracts.validateCanonicalState(packed).scannedIds,['fictional-mail']);
+  assert.throws(()=>contracts.expandCheckpointMetadata({...packed,scannedIds:['other-mail']}),/disagree/);
+  assert.throws(()=>contracts.expandCheckpointMetadata({...packed,scannedIdsFormat:'unknown'}),/Unsupported/);
+});

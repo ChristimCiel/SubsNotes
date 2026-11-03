@@ -3,7 +3,7 @@ import { createLedgerContracts } from './ledger-contracts.mjs';
 import { createSourceEvidenceMerger } from './web-sync.mjs';
 // The assistant supplies actual observed tool replies, not invented summaries.
 // This merges a targeted read; it never claims the mailbox backfill completed.
-export async function mergeAssistantEvidence({state, identityReply, messages, asOf, fxSnapshot=null, parserVersion=state?.parserVersion || '2'}, {createClaudeGmailClient,extractWebEvidence,createFxRuntime,hash}) {
+export async function mergeAssistantEvidence({state, identityReply, messages, asOf, fxSnapshot=null, parserVersion='3'}, {createClaudeGmailClient,extractWebEvidence,createFxRuntime,hash}) {
   if(!state||!Array.isArray(state.events)||!Number.isFinite(Date.parse(asOf))||!Array.isArray(messages))throw new Error('A saved state, observed messages and actual processing time are required');
   if(typeof parserVersion!=='string'||!parserVersion.trim()||parserVersion.length>24)throw new Error('A bounded parser version is required');
   const replies=new Map(messages.map(m=>[m.id,m]));

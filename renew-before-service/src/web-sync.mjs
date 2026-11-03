@@ -31,7 +31,7 @@ export function createSourceEvidenceMerger({ preserveReceiptVerification, billin
     }
     return null;
   }
-  function merge({ events, message, parsed, parserVersion = '2' }) {
+  function merge({ events, message, parsed, parserVersion = '3' }) {
     if (!(events instanceof Map) || !message?.id || !Array.isArray(parsed)) throw new Error('Observed source and parsed records are required');
     if (typeof parserVersion !== 'string' || !parserVersion.trim() || parserVersion.length > 24) throw new Error('A bounded parser version is required');
     const sourceBefore = [...events.values()].filter(event => event.messageId === message.id), reviewedBefore = sourceBefore.filter(reviewed);
@@ -118,7 +118,7 @@ export function createSourceEvidenceMerger({ preserveReceiptVerification, billin
 
 // Platform adapters are injected. Financial state is saved only after a whole
 // bounded page was read successfully; failures preserve the prior checkpoint.
-export function createWebSync({ gmail, store, extract, hash, clock = () => new Date().toISOString(), onProgress = () => {}, parserVersion = '2' }) {
+export function createWebSync({ gmail, store, extract, hash, clock = () => new Date().toISOString(), onProgress = () => {}, parserVersion = '3' }) {
   let running = false;
   const { billingExcerpt, canonicalJSON: canonical } = createLedgerContracts();
   const sourceMerger = createSourceEvidenceMerger({ preserveReceiptVerification, billingExcerpt });

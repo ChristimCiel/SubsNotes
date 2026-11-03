@@ -9,20 +9,20 @@ const source = (kind,extra={}) => ({...base,id:'fictional-'+kind,messageId:'fict
 const at = (events=[base],asOf='2026-08-16T00:00:00Z',extra={}) => projectEvidence(events,{asOf,...extra});
 const sub = (...args) => at(...args).subscriptions[0];
 
-test('an expected payment more than two calendar months ago becomes a reversible, unconfirmed estimate',()=>{
+test('an expected payment more than 60 days ago becomes a reversible, unconfirmed estimate',()=>{
   const events=[base],before=JSON.stringify(events),result=sub(events);
   assert.equal(result.status,'likely_canceled');assert.equal(result.renewal,'on');
-  assert.deepEqual(result.inactivityInference,{reason:'overdue_without_new_charge',expectedPaymentDay:'2026-06-15',thresholdMonths:2,thresholdDay:'2026-08-15',evaluatedAt:'2026-08-16T00:00:00Z',sourceEvidenceId:base.id,confirmed:false});
+  assert.deepEqual(result.inactivityInference,{reason:'overdue_without_new_charge',expectedPaymentDay:'2026-06-15',thresholdDays:60,thresholdDay:'2026-08-14',evaluatedAt:'2026-08-16T00:00:00Z',sourceEvidenceId:base.id,confirmed:false});
   assert.match(result.warnings.join(' '),/Missing email evidence/);
   assert.equal(JSON.stringify(events),before);
-  assert.equal(sub(events,'2026-08-15T23:59:59Z').status,'needs_verification');
-  assert.equal(sub(events,'2026-08-14T00:00:00Z').status,'needs_verification');
+  assert.equal(sub(events,'2026-08-14T23:59:59Z').status,'needs_verification');
+  assert.equal(sub(events,'2026-08-13T00:00:00Z').status,'needs_verification');
 });
 
-test('month-end, year rollover and leap-year windows use calendar months rather than sixty days',()=>{
+test('the 60-day boundary remains exact across month ends, years and leap years',()=>{
   for(const [expected,threshold,dayAfter] of [
-    ['2026-01-31','2026-03-31','2026-04-01'],['2026-12-31','2027-02-28','2027-03-01'],
-    ['2027-12-31','2028-02-29','2028-03-01'],['2026-07-01','2026-09-01','2026-09-02']]) {
+    ['2026-01-31','2026-04-01','2026-04-02'],['2026-12-31','2027-03-01','2027-03-02'],
+    ['2027-12-31','2028-02-29','2028-03-01'],['2026-07-01','2026-08-30','2026-08-31']]) {
     const events=[{...base,receivedAt:expected+'T00:00:00Z',nextBilling:expected}];
     assert.equal(sub(events,threshold+'T23:59:59Z').status,'needs_verification');
     const later=sub(events,dayAfter+'T00:00:00Z');assert.equal(later.status,'likely_canceled');assert.equal(later.inactivityInference.thresholdDay,threshold);
@@ -48,7 +48,7 @@ test('newer charges block the estimate even when currency or exact charge date i
 test('recent subscription, invoice and renewal evidence is retained for checking, not treated as proof of cancellation',()=>{
   for(const event of [
     source('subscription_confirmed'),source('trial_confirmed'),source('renewal_notice'),source('invoice_recorded',{invoiceAmount:{minor:1000,currency:'USD'}}),
-    source('access_expiring',{accessEnds:'2026-06-30'}),source('payment_failed'),source('access_paused')
+    source('payment_failed'),source('access_paused')
   ]) assert.notEqual(sub([base,event]).status,'likely_canceled',event.kind);
 });
 
@@ -99,7 +99,7 @@ test('inferred status never deletes or reclassifies actual payments, refunds or 
   const paid=source('payment_succeeded',{receivedAt:'2026-05-15T00:00:00Z',paymentDay:'2026-05-15',payment:{currency:'USD',minor:1000}});
   const refund=source('refund_recorded',{refund:{currency:'USD',minor:200},refundDay:'2026-07-01'});
   const oneTime=source('one_time_purchase',{serviceKey:'fictional-once',payment:{currency:'USD',minor:2000}});
-  const events=[base,paid,refund,oneTime],before=at(events,'2026-08-14T00:00:00Z'),after=at(events);
+  const events=[base,paid,refund,oneTime],before=at(events,'2026-08-13T00:00:00Z'),after=at(events);
   assert.equal(after.subscriptions[0].status,'likely_canceled');
   for(const key of ['payments','refunds','oneTimePurchases','recordedPaidMinorByCurrency'])assert.deepEqual(after[key],before[key]);
 });

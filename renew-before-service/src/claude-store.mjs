@@ -1,6 +1,9 @@
+import {createLedgerContracts} from './ledger-contracts.mjs';
+
 export function createClaudePersonalStore(db, uid, { hash, revision = () => crypto.randomUUID(), maxBytes = 60_000, conditionalCommit = null } = {}) {
   if (!db || !uid || typeof hash !== 'function') throw new Error('Personal storage and a viewer identity are required');
   if (conditionalCommit !== null && typeof conditionalCommit !== 'function') throw new Error('A conditional commit must be a host-supplied function');
+  const {expandCheckpointMetadata,compactCheckpointMetadata}=createLedgerContracts();
   const collection = db.collection('data/users/' + uid), manifest = collection.doc('subsnotes-state-v1');
   const bytes = value => new TextEncoder().encode(JSON.stringify(value)).byteLength;
   // Databases may reorder object keys. Hash canonical JSON, never insertion
@@ -9,23 +12,36 @@ export function createClaudePersonalStore(db, uid, { hash, revision = () => cryp
     ? Object.fromEntries(Object.keys(item).sort().map(key=>[key,item[key]])) : item);
   let expected = null, saving = false, uncertain = false;
   const version = value => value?.storageRevision || value?.savedAt || null;
-  async function load() {
+  const verifiedChunks = new Map();
+  async function load({fresh = false} = {}) {
     if(saving)throw new Error('A save is already running');
     const snap = await manifest.get();
     if(snap?.metadata?.hasPendingWrites)throw new Error('The saved index has not reached storage yet');
     if (!snap?.exists) { expected = null; uncertain = false; return null; }
-    const value = snap.data();
+    const value = expandCheckpointMetadata(snap.data());
     if (Array.isArray(value.events)) {expected=version(value);uncertain=false;return value;} // Existing small histories remain readable.
     if (value.storageFormat !== 'chunks-v1' || !Array.isArray(value.eventChunks)) throw new Error('Unsupported saved record format');
-    const events = [];
-    for (const id of value.eventChunks) {
-      if (!/^[a-f0-9]{64}$/.test(id)) throw new Error('Invalid saved chunk reference');
-      const chunk = await collection.doc('events-' + id).get();
-      if (!chunk?.exists || !Array.isArray(chunk.data()?.events)) throw new Error('A saved record chunk is unavailable');
-      const part = chunk.data().events;
-      if (await hash(canonical(part)) !== id) throw new Error('A saved record chunk did not match its reference');
-      events.push(...part);
-    }
+    if (value.eventChunks.length > 512 || value.eventChunks.some(id=>! /^[a-f0-9]{64}$/.test(id))) throw new Error('Invalid saved chunk reference');
+    const parts = new Array(value.eventChunks.length); let cursor = 0;
+    // Hash-addressed chunks are immutable. Reuse verified content only within
+    // this viewer-scoped store; manual refresh can force a source read.
+    const read = async () => {
+      while (cursor < value.eventChunks.length) {
+        const index = cursor++, id = value.eventChunks[index];
+        let part = !fresh && verifiedChunks.get(id);
+        if (!part) {
+          const chunk = await collection.doc('events-' + id).get();
+          if (!chunk?.exists || chunk.metadata?.hasPendingWrites || !Array.isArray(chunk.data()?.events)) throw new Error('A saved record chunk is unavailable');
+          part = chunk.data().events;
+          if (await hash(canonical(part)) !== id) throw new Error('A saved record chunk did not match its reference');
+          verifiedChunks.set(id,structuredClone(part));
+        }
+        parts[index] = structuredClone(part);
+      }
+    };
+    await Promise.all(Array.from({length:Math.min(4,value.eventChunks.length)},read));
+    for (const id of verifiedChunks.keys()) if (!value.eventChunks.includes(id)) verifiedChunks.delete(id);
+    const events = parts.flat();
     const {eventChunks, storageFormat, ...state} = value;
     expected = version(value); uncertain = false;
     return {...state, events};
@@ -46,7 +62,7 @@ export function createClaudePersonalStore(db, uid, { hash, revision = () => cryp
     if (part.length) chunks.push(part);
     const ids = await Promise.all(chunks.map(chunk=>hash(canonical(chunk))));
     const {events, ...metadata}=state;
-    const next={...metadata, storageFormat:'chunks-v1',eventChunks:ids,storageRevision:revision()};
+    const next={...compactCheckpointMetadata(metadata), storageFormat:'chunks-v1',eventChunks:ids,storageRevision:revision()};
     if(typeof next.storageRevision!=='string'||!next.storageRevision||next.storageRevision===expected)throw new Error('A fresh storage revision is required');
     if(bytes(next)>maxBytes)throw new Error('The saved index is too large; existing records have been preserved');
     // Immutable content chunks never invalidate the last readable manifest.

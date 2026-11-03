@@ -154,7 +154,7 @@ function servicePeriod(text) {
 }
 
 const MONEY_PATTERN = '(?:' + CURRENCY_MARKERS + ')\\s*[\\d,.]+(?![\\d,.])';
-const afterMoney = (text, label, hint) => money(text.match(new RegExp('(?:' + label + ')\\s*[:：]?\\s*(' + MONEY_PATTERN + ')', 'i'))?.[1], hint);
+const afterMoney = (text, label, hint) => money(text.match(new RegExp('(?:' + label + ')\\s*[:：]?\\s*(' + MONEY_PATTERN + ')', 'i'))?.[1]?.replace(/\.$/,''), hint);
 
 function extractEvidence(input) {
   const message = normalizedMessage(input);
@@ -225,13 +225,16 @@ function extractEvidence(input) {
     const accessEnds = parseDay(text.match(/訂閱到期日[：:]\s*([^\n]{6,30})/)?.[1]);
     return [event(/已到期/.test(subject) ? 'access_expired' : 'access_expiring', subject, { accessEnds })];
   }
-  if (/subscription expires (?:soon|on)/i.test(subject + text)) return [event('access_expiring', subject, { accessEnds: parseDay(text.match(/subscription expires on\s*([^.!\n]{6,45})/i)?.[1]) })];
+  const expirySubject = /subscription (?:will expire|ends?|expires?|has expired|is expired|is about to expire)|訂閱已到期/i.test(subject);
+  if (/subscription (?:has |is )?expired|訂閱已到期/i.test(subject)) return [event('access_expired',billingExcerpt(text) || subject,{accessEnds:parseDay(text.match(/(?:expired|ended) on\s+([^.!\n]{6,40})/i)?.[1])})];
+  if ((expirySubject || !/receipt|invoice|收據|發票/i.test(subject)) && /subscription expires (?:soon|on)/i.test(subject + text) && !/\b(?:in\s+\d+\s+days?|tomorrow)\b/i.test(subject + text)) return [event('access_expiring', subject, { accessEnds: parseDay(text.match(/subscription expires on\s*([^.!\n]{6,45})/i)?.[1]) })];
   if (/automatically downgraded to the free tier/i.test(text)) return [event('access_paused', 'Provider support reports a downgrade to the free tier after a missing payment method. Current promotional access needs verification.')];
   if (service.key.startsWith('cloudflare:') && /auto renewal.*enabled/i.test(text)) return [event('renewal_notice', text.match(/Auto renewal[^\n]+/i)?.[0] || subject, { renewal: 'on' })];
   if (/payment.*(?:failed|declined)|access has been paused|無法順利處理.*付款|付款失敗|逾期未支付/i.test(subject + '\n' + text.slice(0, 1600))) return [event('payment_failed', billingExcerpt(text) || subject)];
-  const tomorrow = /subscription will expire tomorrow/i.test(subject + text);
-  if (/subscription will expire/i.test(subject)) {
-    const days = tomorrow ? 1 : Number(subject.match(/in\s+(\d+)\s+days/i)?.[1]);
+  const expiryText = subject + '\n' + text;
+  const tomorrow = /subscription (?:will expire|ends?|expires?) tomorrow/i.test(expiryText);
+  if ((expirySubject || !/receipt|invoice|收據|發票/i.test(subject)) && /subscription (?:will expire|ends?|expires?|is about to expire)/i.test(expiryText)) {
+    const days = tomorrow ? 1 : Number(expiryText.match(/(?:ends?|expires?|will expire)\s+in\s+(\d+)\s+days?/i)?.[1]);
     const end = Number.isInteger(days) && days > 0 ? dayOf(Date.parse(message.receivedAt) + days * 86400000) : null;
     return [event('access_expiring', billingExcerpt(text) || subject, { accessEnds: end, dateBasis: 'relative_notice', renewal: 'unknown' })];
   }
@@ -284,13 +287,15 @@ function extractEvidence(input) {
 
 function projectEvidence(events, { asOf = new Date().toISOString(), coverage = null, trustConnectorReads = false } = {}) {
   const today = dayOf(asOf);
-  // Calendar months, clamped at month end. This is a projection, never a
-  // cancellation event or a replacement for the provider's account status.
-  const twoMonthsAfter = day => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(day || '') || parseDay(day) !== day) return null;
-    const date = new Date(day + 'T00:00:00Z'), target = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 3, 0));
-    target.setUTCDate(Math.min(date.getUTCDate(), target.getUTCDate()));
-    return dayOf(target);
+  const after60Days = day => parseDay(day) === day && /^\d{4}-\d{2}-\d{2}$/.test(day || '') ? dayOf(Date.parse(day) + 60 * 86400000) : null;
+  const receivedDay = event => dayOf(event.receivedAt);
+  // A late-delivered old receipt cannot resolve a more recent failure.
+  const recovers = (positive, negative) => {
+    if (positive.receivedAt <= negative.receivedAt) return false;
+    if (['subscription_confirmed','trial_confirmed'].includes(positive.kind)) return true;
+    if (positive.kind !== 'payment_succeeded' || !positive.paymentDay || parseDay(positive.paymentDay) !== positive.paymentDay) return false;
+    if (positive.reference && negative.reference && positive.reference !== negative.reference) return false;
+    return positive.paymentDay >= receivedDay(negative);
   };
   const unique = new Map(), conflicts = new Set();
   const financialIdentity = event => contracts.canonicalJSON(Object.fromEntries(['kind','serviceKey','accountRef','reference','transactionRef','lineItemRef','refundRef','payment','refund','invoiceAmount','paymentDay','refundDay','nextBilling','accessEnds','period'].filter(key=>event[key]!==undefined).map(key=>[key,event[key]])));
@@ -398,35 +403,70 @@ function projectEvidence(events, { asOf = new Date().toISOString(), coverage = n
     groups.set(groupKey, group);
   }
   const subscriptions = [...groups.values()].map(group => {
+    const sourceEvents = group.evidenceIds.map(id=>unique.get(id));
+    const positives = sourceEvents.filter(e=>['payment_succeeded','subscription_confirmed','trial_confirmed'].includes(e.kind));
+    const issues = sourceEvents.filter(e=>['payment_failed','access_paused'].includes(e.kind)
+      && !positives.some(p=>p.kind === 'payment_succeeded' && recovers(p,e)));
+    group.unresolvedPaymentProblem = issues.at(-1)?.id || null;
     const access = !group.accessEnds || group.refundSourceAt && group.refundSourceAt >= (group.accessSourceAt || '') ? 'unknown' : group.accessEnds > today ? 'available' : group.accessEnds === today ? 'ends_today' : 'past_recorded_period';
     let status = group.notSubscribed ? 'not_subscribed' : group.renewal === 'off' ? 'renewal_off'
       : group.unresolvedPaymentProblem ? 'payment_problem'
       : group.renewal === 'on' && (group.nextBilling > today || group.cancelBy > today) ? 'active'
-      : access === 'available' ? 'paid_access'
-      : 'needs_verification';
+      : access === 'available' ? 'paid_access' : 'needs_verification';
     const warnings = [...new Set(group.warnings)];
+    const chargesAfterOff = group.renewal === 'off' ? sourceEvents.filter(e=>e.kind === 'payment_succeeded' && e.paymentDay && e.paymentDay > (group.renewalSourceAt || '').slice(0,10)) : [];
+    if(chargesAfterOff.length)status='needs_verification';
+    const relatedHeld = heldEvidence.some(e=>scope(e) === group.serviceKey || !e.accountRef && e.serviceKey === group.providerServiceKey);
+    const expiryEvents = sourceEvents.filter(e=>['access_expiring','access_expired'].includes(e.kind) && !positives.some(p=>recovers(p,e)));
+    const explicitExpiry = expiryEvents.filter(e=>e.kind === 'access_expired' && (!e.accessEnds || e.accessEnds <= today) && receivedDay(e) <= today).at(-1);
+    const signals = [];
+    const signal = (code, records, day = null) => { if(records.length)signals.push({code,day:day || records.map(receivedDay).sort().at(-1),evidenceIds:records.map(e=>e.id)}); };
     let inactivityInference = null;
-    const thresholdDay = twoMonthsAfter(group.nextBilling);
-    if (status === 'needs_verification' && thresholdDay && today > thresholdDay
-      && ![group.accessEnds, group.cancelBy, group.trialEnds].some(day => day && day >= today)) {
-      const relatedHeld = heldEvidence.some(event => scope(event) === group.serviceKey || !event.accountRef && event.serviceKey === group.providerServiceKey);
-      const laterEvidence = group.evidenceIds.some(id => {
-        const event = unique.get(id);
-        if (event.kind === 'payment_succeeded') return [event.paymentDay, event.period?.start, !event.paymentDay && !event.period?.start ? dayOf(event.receivedAt) : null].some(day => day && day >= group.nextBilling);
-        return ['subscription_confirmed','trial_confirmed','renewal_notice','invoice_recorded','access_expiring','access_expired'].includes(event.kind)
-          && event.id !== group.nextBillingEvidenceId && dayOf(event.receivedAt) >= group.nextBilling;
-      });
-      if (!relatedHeld && !laterEvidence) {
-        status = 'likely_canceled';
-        inactivityInference = { reason:'overdue_without_new_charge', expectedPaymentDay:group.nextBilling, thresholdMonths:2, thresholdDay, evaluatedAt:asOf,
-          sourceEvidenceId:group.nextBillingEvidenceId, confirmed:false };
-        warnings.push('Likely canceled is an estimate: the expected payment date is over two calendar months ago and no later charge is recorded. Missing email evidence can change this conclusion. Check the provider to confirm.');
+    const thresholdDay = after60Days(group.nextBilling);
+    const laterCharge = sourceEvents.some(e=>e.kind === 'payment_succeeded'
+      && [e.paymentDay,e.period?.start,!e.paymentDay&&!e.period?.start?receivedDay(e):null].some(day=>day && day >= group.nextBilling));
+    const laterBilling = sourceEvents.some(e=>['subscription_confirmed','trial_confirmed','renewal_notice','invoice_recorded'].includes(e.kind)
+      && e.id !== group.nextBillingEvidenceId && group.nextBilling && receivedDay(e) >= group.nextBilling);
+    const newerInvoice = sourceEvents.some(e=>e.kind === 'invoice_recorded' && e.receivedAt > (expiryEvents.at(-1)?.receivedAt || issues.at(-1)?.receivedAt || asOf));
+    const lastWarningAt = [...expiryEvents,...issues].map(e=>e.receivedAt).sort().at(-1);
+    const newerSuccessfulBilling = lastWarningAt && positives.some(e=>e.kind === 'payment_succeeded' && e.paymentDay && e.paymentDay >= lastWarningAt.slice(0,10) && e.receivedAt > lastWarningAt);
+    const ambiguousRecovery = lastWarningAt && positives.some(e=>e.kind === 'payment_succeeded' && !e.paymentDay && e.receivedAt > lastWarningAt);
+    const futureAccess = [group.accessEnds,group.cancelBy,group.trialEnds,group.nextBilling].some(day=>day && day >= today);
+    const unresolvedWarnings = [...expiryEvents,...issues];
+    const distinctWarnings = new Set(unresolvedWarnings.map(e=>e.messageId));
+    const pastExpiry = expiryEvents.filter(e=>e.accessEnds && e.accessEnds < today);
+    const elapsedRenewal = thresholdDay && today > thresholdDay && !laterCharge && !laterBilling;
+    // Multiple retries from one email are one observation, not independent proof.
+    const warningSources = new Set([...unresolvedWarnings,...(elapsedRenewal?sourceEvents.filter(e=>e.id === group.nextBillingEvidenceId):[])].map(e=>e.messageId));
+    const combined = (distinctWarnings.size >= 2 || elapsedRenewal && warningSources.size >= 2) && pastExpiry.length > 0 && !newerInvoice;
+    if (!group.notSubscribed && group.renewal !== 'off' && !futureAccess && !relatedHeld && !ambiguousRecovery && !newerSuccessfulBilling) {
+      if (explicitExpiry && !newerInvoice) status = 'expired';
+      else if ((elapsedRenewal && !issues.length || combined) && !laterBilling) {
+        status = 'likely_canceled'; // Stable API code; the UI says "Likely inactive".
+        inactivityInference = { reason:combined?'combined_billing_signals':'overdue_without_new_charge', expectedPaymentDay:group.nextBilling,
+          thresholdDays:60,thresholdDay,evaluatedAt:asOf,sourceEvidenceId:group.nextBillingEvidenceId || pastExpiry.at(-1)?.id || null,confirmed:false };
+        warnings.push('Likely inactive is an estimate from recorded billing signals, not confirmed cancellation. Missing email evidence can change this conclusion. Check the provider to confirm.');
       }
     }
+    if (group.renewal === 'off') signal('renewal_disabled',sourceEvents.filter(e=>e.kind === 'renewal_disabled').slice(-1));
+    signal('charge_after_cancellation',chargesAfterOff,chargesAfterOff.at(-1)?.paymentDay || null);
+    if (explicitExpiry) signal('expiry_recorded',[explicitExpiry],explicitExpiry.accessEnds);
+    if (elapsedRenewal) signal('renewal_overdue',sourceEvents.filter(e=>e.id === group.nextBillingEvidenceId),group.nextBilling);
+    signal('expiry_reminders',expiryEvents.filter(e=>e.kind === 'access_expiring'));
+    signal('unresolved_failure',issues);
+    const resolved = sourceEvents.filter(e=>['payment_failed','access_paused','access_expiring','access_expired'].includes(e.kind) && positives.some(p=>recovers(p,e)));
+    signal('recovered_by_payment',positives.filter(p=>p.kind === 'payment_succeeded' && resolved.some(e=>recovers(p,e))));
+    signal('payment_recorded',sourceEvents.filter(e=>e.kind === 'payment_succeeded').slice(-1),group.lastPayment?.day || null);
+    signal('restart_recorded',sourceEvents.filter(e=>['subscription_confirmed','trial_confirmed'].includes(e.kind)).slice(-1));
+    if (relatedHeld) signal('source_conflict',heldEvidence.filter(e=>scope(e) === group.serviceKey || !e.accountRef && e.serviceKey === group.providerServiceKey));
+    const strength = relatedHeld || ambiguousRecovery ? 'limited' : ['renewal_off','expired','active','paid_access'].includes(status) ? 'strong'
+      : status === 'likely_canceled' ? combined ? 'moderate' : 'limited' : status === 'payment_problem' ? distinctWarnings.size >= 2 ? 'moderate' : 'limited' : 'limited';
+    const statusAssessment = { basis:status === 'likely_canceled'?'inferred':['needs_verification','payment_problem'].includes(status)?'unresolved':'recorded',
+      confidence:strength,confidenceMeaning:'evidence_strength_not_probability',evaluatedAt:asOf,signals:signals.sort((a,b)=>(a.day||'').localeCompare(b.day||'')),coverageLimited:true };
     if (group.nextBilling && group.nextBilling <= today && group.renewal !== 'off') warnings.push('The recorded renewal date has arrived or passed. No new billing cycle was invented.');
     if (group.unresolvedPaymentProblem) warnings.push('A payment failure was recorded. Gmail does not establish whether the provider has since resolved it.');
-    return { ...group, status, access, warnings, inactivityInference };
-  }).sort((a, b) => a.name.localeCompare(b.name));
+    return { ...group,status,access,warnings,inactivityInference,statusAssessment };
+  }).sort((a,b)=>a.name.localeCompare(b.name));
   const confirmedPayments = [...payments.values()].filter(e => !e.conflict && e.payment.currency);
   const chatgpt = subscriptions.find(s => s.serviceKey === 'chatgpt');
   if (chatgpt) {
@@ -434,6 +474,7 @@ function projectEvidence(events, { asOf = new Date().toISOString(), coverage = n
     if (laterOpenAI.length) {
       chatgpt.status = 'needs_verification';
       chatgpt.inactivityInference = null;
+      chatgpt.statusAssessment = {...chatgpt.statusAssessment,basis:'unresolved',confidence:'limited'};
       chatgpt.relatedEvidenceIds = laterOpenAI.map(e => e.id);
       chatgpt.warnings.push('Newer OpenAI tax invoices are unclassified. Current ChatGPT status needs verification; these may relate to a different product.');
     }

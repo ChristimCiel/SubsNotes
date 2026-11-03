@@ -4,11 +4,12 @@
 
 A free, MIT-licensed subscription ledger that turns receipt evidence into a clear list of payments, renewal dates and records needing a check. Use your existing AI assistant, or run the local report.
 
-**[Download the Claude skill](https://github.com/ChristimCiel/SubsNotes/releases/download/v0.2.0-alpha.5/subsnotes-subscription-review.zip)** · [Try the fictional demo](https://christimciel.github.io/SubsNotes/) · [All downloads](https://github.com/ChristimCiel/SubsNotes/releases)
+**[Download the Claude skill](https://github.com/ChristimCiel/SubsNotes/releases/download/v0.2.0-alpha.6/subsnotes-subscription-review.zip)** · [Try the fictional demo](https://christimciel.github.io/SubsNotes/) · [All downloads](https://github.com/ChristimCiel/SubsNotes/releases)
 
 The hosted demo uses fictional data. It does not read email, send notifications or cancel subscriptions.
 
-**Likely canceled** is an estimate, not confirmed cancellation: an explicitly recorded expected payment date is over two calendar months ago, with no later charge or conflicting evidence in the saved records. These plans are hidden by default but remain available through the state filter, with source emails and the reason shown. Missing email can make the estimate wrong. New billing evidence is re-evaluated automatically when the ledger is refreshed; payment history is preserved. SubsNotes does not cancel the provider’s plan.
+**Likely inactive** is an estimate from dated billing evidence: a renewal more than 60 days overdue without later payment, or multiple distinct unresolved expiry/payment warnings. Recorded cancellations, reported expiry and payment issues remain separate. Open details for qualitative evidence strength and original emails. Missing mail can change the conclusion; no status cancels the provider's plan or deletes payment history.
+
 
 ## Try it in Claude
 
@@ -17,7 +18,9 @@ The browser experience is a **preview** for accounts with Gmail, code execution,
 1. Download the skill ZIP above. In Claude's skill settings, upload the ZIP and enable it. Menu labels can vary by account.
 2. Connect Gmail through Claude's own connection settings if it is not already connected.
 3. Ask: **“Use SubsNotes to find my personal subscriptions and show what I have paid. Keep the ledger private.”** Review the read-only Gmail permission prompt and check **Only you** before continuing.
-4. Keep the link to the resulting private SubsNotes Artifact. Reopen that same ledger next time, or give its link to a new Claude conversation and ask: **“Show my SubsNotes subscriptions here.”**
+4. Keep the link to the resulting private SubsNotes Artifact. Reopen that same ledger next time, or give its link to a new Claude conversation and ask: **“Open my saved SubsNotes dashboard.”**
+
+**For fast reopening, bookmark and open the same private Artifact.** It reads your saved ledger directly instead of asking AI to regenerate HTML. **Refresh** reloads saved records; **Check Gmail** searches for billing changes. Search, filters and period/currency choices remain usable during synchronization. Private records are not copied into a shared cache or hosted by SubsNotes.
 
 The ZIP contains the empty-data dashboard and deterministic read-view tools. A supported assistant can show a searchable, dated read-only view inside chat. The view uses a compact panel, up to 760 × 560 pixels, with a scrolling service list and expandable details. Its surrounding iframe size remains under the host's control. Filters and details stay in that view; ask in chat to refresh the canonical records. The visual itself is not storage and does not synchronize itself. If native private storage or in-chat visuals are unavailable, the skill explains the missing capability instead of claiming setup succeeded.
 

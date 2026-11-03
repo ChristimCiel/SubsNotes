@@ -374,3 +374,31 @@ test('genuine provider read errors still respect backoff and exhaust their bound
   now = '2026-09-19T00:00:00Z'; await run();
   assert.equal(calls, 3);
 });
+
+test('saved Gmail-shaped evidence reopens, refreshes and syncs a recovery, price change and cancellation without regeneration',async()=>{
+  let saved=null,phase=0;
+  const now='2026-11-04T20:00:00Z';
+  const entries={
+    old:{subject:'Your Claude subscription is confirmed',text:'Your next charge will be on July 1, 2026.',receivedAt:'2026-06-01T10:00:00Z'},
+    reminder:{subject:'Your subscription ends in 3 days',text:'Your subscription ends in 3 days.',receivedAt:'2026-06-28T10:00:00Z'},
+    failure:{subject:'Your payment failed',text:'Your payment failed.',receivedAt:'2026-07-01T10:00:00Z'},
+    paid:{subject:'Your subscription receipt',text:'Claude Pro. Paid Nov 4, 2026. Nov 4–Dec 4, 2026 Amount paid EUR 20.00',receivedAt:'2026-11-04T10:00:00Z'},
+    change:{subject:'Your Claude subscription is confirmed',text:'Your subscription will renew at EUR 25.00 on Dec 4, 2026.',receivedAt:'2026-11-04T12:00:00Z'},
+    off:{subject:'Your subscription was canceled',text:'Your subscription was successfully canceled. Your access will expire on Dec 4, 2026.',receivedAt:'2026-11-04T13:00:00Z'}
+  };
+  const keys=[['old','reminder','failure'],['old','reminder','failure','paid'],['old','reminder','failure','paid','change'],Object.keys(entries)];
+  const gmail={identity:async()=>'synthetic@example.invalid',search:async()=>({ids:keys[phase],nextPageToken:null}),message:async id=>({id,...entries[id],sender:'billing@anthropic.com',sourceFormat:'claude_plaintext',sourceReadAt:now})};
+  const store={load:async()=>structuredClone(saved),save:async next=>{saved=structuredClone(next);}};
+  const sync=()=>createWebSync({gmail,store,extract:extractWebEvidence,hash:digest,clock:()=>now});
+  await sync().run();const first=projectEvidence((await store.load()).events,{asOf:now,trustConnectorReads:true});
+  assert.equal(first.subscriptions[0].status,'likely_canceled');assert.equal(first.subscriptions[0].statusAssessment.confidence,'moderate');
+  const reopened=await store.load();assert.equal(reopened.events.length,3);
+  phase=1;await sync().run();const recovered=projectEvidence(saved.events,{asOf:now,trustConnectorReads:true});
+  assert.equal(recovered.subscriptions[0].status,'paid_access');assert.equal(recovered.subscriptions[0].unresolvedPaymentProblem,null);assert.deepEqual(recovered.recordedPaidMinorByCurrency,{EUR:2000});
+  phase=2;await sync().run();const changed=projectEvidence(saved.events,{asOf:now,trustConnectorReads:true});
+  assert.equal(changed.subscriptions[0].status,'active');assert.equal(changed.subscriptions[0].nextCharge.minor,2500);assert.deepEqual(changed.recordedPaidMinorByCurrency,{EUR:2000});
+  phase=3;await sync().run();const canceled=projectEvidence(saved.events,{asOf:now,trustConnectorReads:true});
+  assert.equal(canceled.subscriptions[0].status,'renewal_off');assert.equal(canceled.subscriptions[0].access,'available');
+  assert.equal(canceled.subscriptions[0].statusAssessment.basis,'recorded');assert.equal(canceled.subscriptions[0].accessEnds,'2026-12-04');
+  const replay=await sync().run();assert.equal(replay.addedEvidence,0);assert.equal(saved.events.length,6);
+});

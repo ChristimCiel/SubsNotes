@@ -16,7 +16,7 @@ const template = await readFile(new URL('../src/claude-dashboard.html',import.me
 
 // A minimal DOM harness exercises the mounted handlers against delayed storage.
 // Native dialog focus and browser layout are separately verified in browser QA.
-async function harness({events=null,prefs={},freezePreferences=false,now=null}={}) {
+async function harness({events=null,prefs={},freezePreferences=false,now=null,mcpReady=null,syncRun=null,initialState={}}={}) {
   const elements = new Map();
   class Element {
     constructor(id) {this.id=id;this.value='';this.textContent='';this.dataset={};this.listeners={};this.disabled=false;this.open=false;this._html='';}
@@ -36,18 +36,18 @@ async function harness({events=null,prefs={},freezePreferences=false,now=null}={
   }
   for(const [,id] of template.matchAll(/id="([^"]+)"/g)) elements.set(id,new Element(id));
   const document = {getElementById:id=>elements.get(id)||null,documentElement:{},visibilityState:'visible',querySelector:()=>new Element('summary'),querySelectorAll:()=>[],addEventListener(){}};
-  let persisted={version:1,events:events||['alpha','beta'].map(key=>({id:key,messageId:'synthetic-'+key,serviceKey:key,service:'Fictional '+key,category:'Software',kind:'payment_succeeded',authenticated:true,receivedAt:'2026-07-01T01:00:00Z',payment:{currency:'USD',minor:1200},paymentDay:'2026-07-01',paymentDateBasis:'explicit'})),prefs};
+  let persisted={version:1,events:events||['alpha','beta'].map(key=>({id:key,messageId:'synthetic-'+key,serviceKey:key,service:'Fictional '+key,category:'Software',kind:'payment_succeeded',authenticated:true,receivedAt:'2026-07-01T01:00:00Z',payment:{currency:'USD',minor:1200},paymentDay:'2026-07-01',paymentDateBasis:'explicit'})),prefs,...initialState};
   const pendingSaves=[];
   const store={load:async()=>{const state=clone(persisted);if(freezePreferences)Object.freeze(state.prefs);return state;},getRevision:async()=>persisted.storageRevision||null,save:next=>new Promise((resolve,reject)=>pendingSaves.push({next:clone(next),resolve:()=>{persisted=clone(next);resolve();},reject}))};
   const capabilities={mcp:{},db:{},user:{id:async()=>'fictional-user'},permissions:{manage(){}}};
-  const window={claude:{use:async key=>capabilities[key]},addEventListener(){}};
+  const window={claude:{use:async key=>key==='mcp'&&mcpReady?await mcpReady:capabilities[key]},addEventListener(){}};
   const ClockDate = now ? class extends Date { constructor(...args){super(...(args.length?args:[now]));}static now(){return new Date(now).getTime();} } : Date;
   const mount=vm.runInNewContext('('+mountClaudeDashboard.toString()+')',{document,window,crypto:webcrypto,TextEncoder,Date:ClockDate,setInterval(){}});
-  mount({createEvidenceRuntime,createCashflowRuntime,createFxRuntime,createSubscriptionViewRuntime,createServiceBrandsRuntime,extractWebEvidence(){},createClaudePersonalStore:()=>store,createClaudeRatesClient:()=>({load:async()=>{throw new Error('Rates unavailable in this test');}}),createClaudeGmailClient:()=>({}),createWebSync:()=>({run(){throw new Error('No scan is requested by these tests');}})});
+  mount({createEvidenceRuntime,createCashflowRuntime,createFxRuntime,createSubscriptionViewRuntime,createServiceBrandsRuntime,extractWebEvidence(){},createClaudePersonalStore:()=>store,createClaudeRatesClient:()=>({load:async()=>{throw new Error('Rates unavailable in this test');}}),createClaudeGmailClient:()=>({}),createWebSync:()=>({run:syncRun||(()=>{throw new Error('No scan is requested by these tests');})})});
   for(let i=0;i<4;i++)await flush();
   const open=async key=>{const button=new Element('row');button.dataset.record=key;button.closest=()=>button;await elements.get('list').dispatch('click',{target:button});};
   const change=days=>{const select=elements.get('review');select.value=String(days);return select.dispatch('change');};
-  return {elements,pendingSaves,open,change,get persisted(){return clone(persisted);}};
+  return {elements,pendingSaves,open,change,replace:next=>{persisted=clone(next);},get persisted(){return clone(persisted);}};
 }
 
 test('closing and reopening during a review save shows pending state, then the persisted date in the current selector',async()=>{
@@ -240,13 +240,44 @@ test('bundled logos and their attribution remain static data in the empty-accoun
 test('likely-canceled plans hide by default but remain inspectable and bilingual without changing the saved ledger',async()=>{
   const events=[{id:'fictional-old',messageId:'fictional-old-mail',serviceKey:'fictional-old',service:'Fictional Old Plan',category:'Software',kind:'subscription_confirmed',authenticated:true,receivedAt:'2020-01-01T00:00:00Z',nextBilling:'2020-02-01'}];
   const app=await harness({events});
-  assert.match(app.elements.get('count').textContent,/0 records · 1 likely canceled hidden/);
+  assert.match(app.elements.get('count').textContent,/0 records · 1 likely inactive hidden/);
   assert.doesNotMatch(app.elements.get('list').innerHTML,/data-record="fictional-old"/);
   const filter=app.elements.get('filter');filter.value='likely_canceled';await filter.dispatch('change');
-  assert.match(app.elements.get('list').innerHTML,/Fictional Old Plan/);assert.match(app.elements.get('list').innerHTML,/Likely canceled/);
-  await app.open('fictional-old');assert.match(app.elements.get('detail-body').innerHTML,/not confirmed cancellation/);assert.match(app.elements.get('detail-body').innerHTML,/Two-month threshold/);
+  assert.match(app.elements.get('list').innerHTML,/Fictional Old Plan/);assert.match(app.elements.get('list').innerHTML,/Likely inactive/);
+  await app.open('fictional-old');assert.match(app.elements.get('detail-body').innerHTML,/not confirmed cancellation/);assert.match(app.elements.get('detail-body').innerHTML,/Inactivity threshold/);
   app.elements.get('detail').close();await app.elements.get('language').dispatch('click');await app.open('fictional-old');
-  assert.equal(filter.value,'likely_canceled');assert.match(app.elements.get('list').innerHTML,/可能已取消/);
+  assert.equal(filter.value,'likely_canceled');assert.match(app.elements.get('list').innerHTML,/可能已停用/);
   assert.match(app.elements.get('detail-body').innerHTML,/並非確認取消/);
   assert.deepEqual(app.persisted.events,events);
+});
+
+
+test('saved records render before a stalled Gmail handshake and remain usable without live tools',async()=>{
+  const app=await harness({mcpReady:new Promise(()=>{})});
+  assert.match(app.elements.get('list').innerHTML,/Fictional alpha/);
+  assert.equal(app.elements.get('refresh').disabled,false);assert.equal(app.elements.get('sync').disabled,true);
+  assert.equal(app.elements.get('month').disabled,false);
+  await app.open('alpha');assert.equal(app.elements.get('detail').open,true);
+});
+
+test('Refresh reads externally updated records without scanning Gmail or replacing financial history',async()=>{
+  let scans=0;const app=await harness({syncRun:()=>{scans++;throw new Error('Unexpected Gmail scan');},prefs:{language:'en'}});
+  const original=app.persisted,added={...original.events[0],id:'gamma',messageId:'mail-gamma',serviceKey:'gamma',service:'Fictional gamma'};
+  app.replace({...original,storageRevision:'revision-two',events:[...original.events,added]});
+  await app.elements.get('refresh').dispatch('click');for(let i=0;i<8;i++)await flush();
+  assert.equal(scans,0);assert.match(app.elements.get('status').textContent,/Saved records reloaded/);assert.equal(app.elements.get('count').textContent,'3 records');assert.match(app.elements.get('list').innerHTML,/Fictional gamma/);
+  assert.deepEqual(app.persisted.events.slice(0,2),original.events);
+  assert.equal(app.elements.get('refresh').disabled,false);
+});
+
+test('month and currency selections stay interactive during sync and persist after the single writer finishes',async()=>{
+  let finish;const app=await harness({prefs:{language:'en',month:'all',currency:'USD'},syncRun:()=>new Promise(resolve=>{finish=()=>resolve({state:app.persisted,complete:true});})});
+  const running=app.elements.get('sync').dispatch('click');await flush();
+  assert.equal(app.elements.get('month').disabled,false);assert.equal(app.elements.get('currency').disabled,false);
+  const month=app.elements.get('month');month.value='2026-07';await month.dispatch('change');
+  const currency=app.elements.get('currency');currency.value='EUR';await currency.dispatch('change');
+  assert.equal(app.pendingSaves.length,0);finish();for(let i=0;i<4;i++)await flush();
+  assert.equal(app.pendingSaves.length,1);app.pendingSaves[0].resolve();await running;
+  assert.equal(app.persisted.prefs.month,'2026-07');assert.equal(app.persisted.prefs.currency,'EUR');
+  assert.equal(month.value,'2026-07');assert.equal(currency.value,'EUR');
 });
