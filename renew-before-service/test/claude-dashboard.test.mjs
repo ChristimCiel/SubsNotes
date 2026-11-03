@@ -15,7 +15,7 @@ const template = await readFile(new URL('../src/claude-dashboard.html',import.me
 
 // A minimal DOM harness exercises the mounted handlers against delayed storage.
 // Native dialog focus and browser layout are separately verified in browser QA.
-async function harness() {
+async function harness({events=null,prefs={},freezePreferences=false}={}) {
   const elements = new Map();
   class Element {
     constructor(id) {this.id=id;this.value='';this.textContent='';this.dataset={};this.listeners={};this.disabled=false;this.open=false;this._html='';}
@@ -35,9 +35,9 @@ async function harness() {
   }
   for(const [,id] of template.matchAll(/id="([^"]+)"/g)) elements.set(id,new Element(id));
   const document = {getElementById:id=>elements.get(id)||null,documentElement:{},visibilityState:'visible',querySelector:()=>new Element('summary'),querySelectorAll:()=>[],addEventListener(){}};
-  let persisted={version:1,events:['alpha','beta'].map(key=>({id:key,messageId:'synthetic-'+key,serviceKey:key,service:'Fictional '+key,category:'Software',kind:'payment_succeeded',authenticated:true,receivedAt:'2026-07-01T01:00:00Z',payment:{currency:'USD',minor:1200},paymentDay:'2026-07-01',paymentDateBasis:'explicit'})),prefs:{}};
+  let persisted={version:1,events:events||['alpha','beta'].map(key=>({id:key,messageId:'synthetic-'+key,serviceKey:key,service:'Fictional '+key,category:'Software',kind:'payment_succeeded',authenticated:true,receivedAt:'2026-07-01T01:00:00Z',payment:{currency:'USD',minor:1200},paymentDay:'2026-07-01',paymentDateBasis:'explicit'})),prefs};
   const pendingSaves=[];
-  const store={load:async()=>clone(persisted),getRevision:async()=>persisted.storageRevision||null,save:next=>new Promise((resolve,reject)=>pendingSaves.push({next:clone(next),resolve:()=>{persisted=clone(next);resolve();},reject}))};
+  const store={load:async()=>{const state=clone(persisted);if(freezePreferences)Object.freeze(state.prefs);return state;},getRevision:async()=>persisted.storageRevision||null,save:next=>new Promise((resolve,reject)=>pendingSaves.push({next:clone(next),resolve:()=>{persisted=clone(next);resolve();},reject}))};
   const capabilities={mcp:{},db:{},user:{id:async()=>'fictional-user'},permissions:{manage(){}}};
   const window={claude:{use:async key=>capabilities[key]},addEventListener(){}};
   const mount=vm.runInNewContext('('+mountClaudeDashboard.toString()+')',{document,window,crypto:webcrypto,TextEncoder,setInterval(){}});
@@ -91,4 +91,50 @@ test('a failed review write restores the persisted choice with visible failure f
   assert.equal(app.persisted.prefs.reviews,undefined);
   app.elements.get('detail').close();await app.open('alpha');
   assert.equal(app.elements.get('review').value,'0');
+});
+
+const periodEvents = [
+  ['july-usd','2026-07-01','USD',1200], ['august-usd','2026-08-01','USD',3000], ['august-jpy','2026-08-02','JPY',800]
+].map(([id,paymentDay,currency,minor])=>({id,messageId:'synthetic-'+id,serviceKey:id,service:'Fictional '+id,category:'Software',kind:'payment_succeeded',authenticated:true,receivedAt:paymentDay+'T01:00:00Z',payment:{currency,minor},paymentDay,paymentDateBasis:'explicit'}));
+
+test('frozen SDK preferences cannot delay the selected month or its financial total',async()=>{
+  const app=await harness({events:periodEvents,freezePreferences:true});
+  const month=app.elements.get('month');month.value='2026-07';
+  await month.dispatch('change');
+  assert.equal(month.value,'2026-07');
+  assert.equal(app.elements.get('originals').textContent,'USD 12.00');
+  assert.equal(app.elements.get('total').textContent,'USD 12.00');
+  await flush();assert.equal(app.pendingSaves.length,1);
+  assert.equal(app.persisted.prefs.month,undefined);
+  app.pendingSaves[0].resolve();await flush();await flush();
+  assert.equal(app.persisted.prefs.month,'2026-07');
+  assert.equal(app.elements.get('total').textContent,'USD 12.00');
+});
+
+test('rapid queued period and currency choices keep the latest controls and amounts in sync between older saves',async()=>{
+  const app=await harness({events:periodEvents,freezePreferences:true});
+  const month=app.elements.get('month'),currency=app.elements.get('currency');
+  month.value='2026-07';await month.dispatch('change');await flush();
+  month.value='2026-08';await month.dispatch('change');
+  currency.value='JPY';await currency.dispatch('change');
+  assert.equal(month.value,'2026-08');assert.equal(currency.value,'JPY');
+  assert.equal(app.elements.get('originals').textContent,'USD 30.00 · JPY 800');
+  assert.equal(app.elements.get('total').textContent,'Partial total · JPY 800');
+  app.pendingSaves[0].resolve();await flush();await flush();
+  assert.equal(app.persisted.prefs.month,'2026-07');
+  assert.equal(month.value,'2026-08');assert.equal(currency.value,'JPY');
+  assert.equal(app.elements.get('total').textContent,'Partial total · JPY 800');
+  app.pendingSaves[1].resolve();await flush();await flush();
+  assert.equal(month.value,'2026-08');assert.equal(currency.value,'JPY');
+  assert.equal(app.elements.get('total').textContent,'Partial total · JPY 800');
+  currency.value='USD';await currency.dispatch('change');
+  assert.equal(app.elements.get('total').textContent,'Partial total · USD 30.00');
+  app.pendingSaves[2].resolve();await flush();await flush();
+  assert.equal(app.persisted.prefs.currency,'JPY');
+  assert.equal(currency.value,'USD');assert.equal(app.elements.get('total').textContent,'Partial total · USD 30.00');
+  app.pendingSaves[3].resolve();await flush();await flush();
+  assert.equal(app.persisted.prefs.month,'2026-08');assert.equal(app.persisted.prefs.currency,'USD');
+  const reopened=await harness({events:periodEvents,prefs:app.persisted.prefs,freezePreferences:true});
+  assert.equal(reopened.elements.get('month').value,'2026-08');assert.equal(reopened.elements.get('currency').value,'USD');
+  assert.equal(reopened.elements.get('total').textContent,'Partial total · USD 30.00');
 });
