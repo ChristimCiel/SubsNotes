@@ -4,7 +4,7 @@
 
 A free, MIT-licensed subscription ledger that turns receipt evidence into a clear list of payments, renewal dates and records needing a check. Use your existing AI assistant, or run the local report.
 
-**[Download the Claude skill](https://github.com/ChristimCiel/SubsNotes/releases/download/v0.2.0-alpha.3/subsnotes-subscription-review.zip)** · [Try the fictional demo](https://christimciel.github.io/SubsNotes/) · [All downloads](https://github.com/ChristimCiel/SubsNotes/releases)
+**[Download the Claude skill](https://github.com/ChristimCiel/SubsNotes/releases/download/v0.2.0-alpha.4/subsnotes-subscription-review.zip)** · [Try the fictional demo](https://christimciel.github.io/SubsNotes/) · [All downloads](https://github.com/ChristimCiel/SubsNotes/releases)
 
 The hosted demo uses fictional data. It does not read email, send notifications or cancel subscriptions.
 
@@ -21,7 +21,13 @@ The ZIP contains the empty-data dashboard and deterministic read-view tools. A s
 
 The generated HTML targets compatible visuals, Artifacts or full-screen surfaces. It is not a registered ChatGPT App. ChatGPT's official inline App cards prohibit nested scrolling; a registered App would need a summary card and a full-screen view instead. Claude inline visuals and Artifacts are different surfaces, and mobile availability depends on the host.
 
-Recognizable service marks are bundled only where the owner's published policy has been reviewed. OpenAI, Linear and Vercel assets are included with source and trademark notices; other services retain readable initials. No logo request sends subscription names to an external image service. Artwork and trademarks remain subject to their owners' terms, separate from the source-code MIT license.
+Inline visuals remain experimental: a host session can show a blank panel or a visualize display error even with a valid fragment. A prompt cannot repair that host initialization failure. If it happens, use the same private Artifact or request a plain chat table; do not create a replacement ledger or grant extra permissions just to display it.
+
+The reviewed bundle includes 35 product marks across eight owner families: OpenAI, Linear, Vercel, Cursor, Figma, Supabase, Hugging Face and Atlassian. Product marks are not a count of distinct companies. Owner sources, notices and applicable artwork licenses are retained; they are separate from the source-code MIT license. Missing or unavailable images retain readable initials.
+
+For broader coverage, the separate dated directory contains 6,605 public integration records: 5,018 ChatGPT apps in the observed public directory scope, 1,059 Claude connectors and 528 Claude plugins. It includes 5,759 unsigned artwork references. These are not counts of licensed logos or every integration worldwide; some listings publish no artwork, and availability varies by scope and over time.
+
+An optional private artwork cache downloads the whole public snapshot, never subscription-selected image queries. From a checkout, run `npm run cache:logos -- --all-public-catalog --directory /private/subsnotes-logo-cache`; from the installed skill, use `node scripts/cache-service-logos.mjs` with the same arguments. This can take several minutes and hundreds of MB; it is not required to use SubsNotes. Add `--logo-cache /private/subsnotes-logo-cache` to a view command to read matching images locally. Download failures, unsafe files and ambiguous brands remain explicit fallbacks. Cached artwork stays outside the repo and is not redistributed or represented as permission-cleared. No image requests are made while rendering a view.
 
 ChatGPT can review an explicitly supplied export or supported local dataset. It does **not** automatically access Claude's private store. A skill alone cannot grant account access, create a background service or cancel a plan.
 
@@ -99,6 +105,8 @@ npm run view -- --state /private/ledger.json --output /private/subscriptions.htm
 ```
 
 Use `--language zh` for Traditional Chinese, `--month YYYY-MM` for a paid month, and `--currency TWD` for reference conversion using the ledger's saved rates. This command performs no network request and never changes the ledger. Inputs and outputs must remain outside the source repository; existing files are not overwritten. A raw JSON file's shape validation is not proof of its source. Portable imports are checked for corruption and marked for source rechecks; their old trust flags are not accepted. HTML views contain private financial information, so share them only deliberately.
+
+Add `--surface inline` to produce a content fragment for a compatible in-chat HTML renderer. It retains the same financial data and interactions, omits document-level wrappers and supplies an intrinsic 560px height for host sizing. The default `--surface standalone` retains the complete HTML document and its security policy. An assistant may omit artwork while generating a visual; that is distinct from an image-loading error. Neither a prompt nor a tool-success message guarantees that every host or account displayed the widget.
 
 ## Tests
 

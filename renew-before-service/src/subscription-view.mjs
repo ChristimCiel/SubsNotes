@@ -35,6 +35,8 @@ export function createSubscriptionViewRuntime({ brands = null } = {}) {
   Object.assign(words.zh, { account:'帳戶', cancelBy:'信件記載取消期限', trialEnds:'信件記載試用結束', check_trial:'續費前請核對信件或業者帳戶中的試用期限與後續價格。', warn_adjusted_payment:'有付款包含折扣或調整，該金額不代表下次續訂價格。', warn_invoice_unverified:'僅有發票無法確認實際付款、產品或續訂狀態。', warn_payment_conflict:'付款來源記載不一致，請核對原始紀錄。', warn_refund_conflict:'退款來源記載不一致，請核對原始紀錄。', warn_refund_status:'退款紀錄無法確認銀行入帳或是否仍可使用。', warn_access_conflict:'來源記載的使用期限不同，請核對兩封信件。', warn_relative_access:'使用期限來自相對時間通知，續訂狀態仍待確認。', warn_renewal_passed:'信件記載的續訂日已到或已過，未自行推算新的扣款週期。', warn_payment_unresolved:'已記錄付款問題，尚未確認是否解決。', warn_product_mismatch:'較新的發票可能屬於其他產品，目前訂閱狀態仍待確認。' });
   Object.assign(words.en, { source_payment:'Payment email', source_subscription:'Subscription email', source_trial:'Trial email', source_cancellation:'Renewal-off email', source_invoice:'Invoice email', source_issue:'Payment-issue email', source_refund:'Refund email', source_renewal:'Renewal email', source_access:'Access notice', source_status:'Account-status email', source_other:'Original email', logoNotice:'Service logos belong to their owners. Used to identify subscriptions; no affiliation or endorsement. The source-code license does not relicense brand marks.' });
   Object.assign(words.zh, { source_payment:'付款信件', source_subscription:'訂閱確認信件', source_trial:'試用信件', source_cancellation:'關閉續訂信件', source_invoice:'發票信件', source_issue:'付款問題信件', source_refund:'退款信件', source_renewal:'續訂信件', source_access:'使用期限通知', source_status:'帳戶狀態信件', source_other:'原始信件', logoNotice:'服務 Logo 的權利屬於各自品牌，僅用於辨識訂閱，不代表合作或背書。程式碼授權不包含品牌商標授權。' });
+  Object.assign(words.en,{synthetic:'Synthetic demo · no Gmail access',syntheticSource:'Synthetic source · no mailbox opened'});
+  Object.assign(words.zh,{synthetic:'合成資料示範・不會開啟信箱',syntheticSource:'合成來源・不會開啟信箱'});
   function build({ state, core, cashflow, fx, month = null, currency = null, fxSnapshot = null, asOf = new Date() }) {
     if (!state || !Array.isArray(state.events) || !core?.projectEvidence || !cashflow?.summarize || !fx?.convertTotals) throw new Error('A saved ledger and the shared receipt, cashflow and FX runtimes are required');
     const generatedAt = new Date(asOf).toISOString();
@@ -82,7 +84,7 @@ export function createSubscriptionViewRuntime({ brands = null } = {}) {
         heldEvidenceCount:projection.heldEvidence?.length || 0 },
       totals:{ paidMinorByCurrency:totals(fiscal.paidMinorByCurrency), providerRefundMinorByCurrency:totals(fiscal.providerRefundMinorByCurrency), excludedPayments:fiscal.excluded.filter(row => !row.refund).length, converted, basis:fiscal.basis, bankReconciled:false }, rows };
   }
-  function renderHTML(snapshot, { language = 'en' } = {}) {
+  function renderHTML(snapshot, { language = 'en', synthetic = false } = {}) {
     if (!snapshot || snapshot.kind !== 'subsnotes.read-view' || snapshot.version !== version || snapshot.mode !== 'read-only' || !Array.isArray(snapshot.rows)) throw new Error('A supported SubsNotes read-only snapshot is required');
     const lang = language === 'zh' ? 'zh' : 'en', w = words[lang];
     const localized = (en, zh, tag = 'span', attrs = '') => '<'+tag+' data-en="'+escape(en)+'" data-zh="'+escape(zh)+'"'+attrs+'>'+escape(lang === 'zh' ? zh : en)+'</'+tag+'>';
@@ -103,9 +105,10 @@ export function createSubscriptionViewRuntime({ brands = null } = {}) {
     const brandImage = row => {
       let brand = null;
       try { brand = brands?.resolve?.({serviceKey:row.providerServiceKey,name:row.name}); } catch { /* A catalog failure must not hide a subscription. */ }
-      const src = typeof brand?.src === 'string' && brand.src.length <= 32768 && /^data:image\/svg\+xml;base64,[A-Za-z0-9+/]+={0,2}$/.test(brand.src) ? brand.src : null;
+      const src = typeof brand?.src === 'string' && brand.src.length <= (brand.src.startsWith('data:image/svg+xml;')?32768:175000) && /^data:image\/(?:svg\+xml|png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(brand.src) ? brand.src : null;
+      const imageStyle = /^#[a-f0-9]{6}$/i.test(brand?.imageBackground || '') ? ' style="background:'+brand.imageBackground+'"' : '';
       const initials = text(brand?.initials,3) || String(row.name || '?').slice(0,2).toUpperCase();
-      return '<span class="initial" aria-hidden="true"><span>'+escape(initials)+'</span>'+(src ? '<img data-brand-logo src="'+escape(src)+'" width="26" height="26" alt="" decoding="async">' : '')+'</span>';
+      return '<span class="initial" aria-hidden="true"><span>'+escape(initials)+'</span>'+(src ? '<img data-brand-logo'+imageStyle+' src="'+escape(src)+'" width="26" height="26" alt="" decoding="async">' : '')+'</span>';
     };
     const rowHTML = row => {
       const trialDates = row.renewal !== 'off' ? dates([day(row.cancelBy),day(row.trialEnds),instant(row.nextAt)]) : [];
@@ -116,7 +119,7 @@ export function createSubscriptionViewRuntime({ brands = null } = {}) {
       const cancelEn = words.en.askCancel+' '+row.name, cancelZh = words.zh.askCancel+' '+row.name;
       const accountLabel = Number.isSafeInteger(row.accountOrdinal) && row.accountOrdinal > 0 && Number.isSafeInteger(row.accountCount) && row.accountCount >= row.accountOrdinal ? localized(words.en.account+' '+row.accountOrdinal+' / '+row.accountCount,words.zh.account+' '+row.accountOrdinal+' / '+row.accountCount) : '';
       const warningCodes = [...new Set((row.warningCodes || []).filter(key=>Object.hasOwn(warningMessages,key)))];
-      const sources = (row.sources || []).filter(source => /^[A-Za-z0-9_-]{1,200}$/.test(source.messageId)).map((source,index) => '<a href="https://mail.google.com/mail/#all/'+encodeURIComponent(source.messageId)+'" target="_blank" rel="noopener noreferrer">'+label('source_'+(Object.values(sourceTypes).includes(source.type)?source.type:'other'))+' · '+(source.receivedAt?date(source.receivedAt):escape(index+1))+' ↗</a>').join('');
+      const sources = (row.sources || []).filter(source => /^[A-Za-z0-9_-]{1,200}$/.test(source.messageId)).map((source,index) => synthetic===true?'<span class="synthetic-source">'+label('syntheticSource')+' · '+label('source_'+(Object.values(sourceTypes).includes(source.type)?source.type:'other'))+' · '+(source.receivedAt?date(source.receivedAt):escape(index+1))+'</span>':'<a href="https://mail.google.com/mail/#all/'+encodeURIComponent(source.messageId)+'" target="_blank" rel="noopener noreferrer">'+label('source_'+(Object.values(sourceTypes).includes(source.type)?source.type:'other'))+' · '+(source.receivedAt?date(source.receivedAt):escape(index+1))+' ↗</a>').join('');
       return '<details class="subscription" data-name="'+escape(String(row.name).toLowerCase())+'" data-state="'+escape(status)+'" data-next="'+escape(instant(next) || '9999-12-31')+'" data-source="'+escape(instant(row.lastSourceAt) || '')+'">'
         +'<summary><span class="service">'+brandImage(row)+'<span class="service-text"><strong>'+escape(row.name)+'</strong><small>'+accountLabel+(accountLabel && (row.plan || row.category)?' · ':'')+(row.plan?escape(row.plan):Object.hasOwn(words.zh,row.category)?label(row.category):escape(row.category||''))+'</small></span></span>'
         +'<span class="price">'+money(row.primaryAmount)+'<small>'+label(row.amountBasis || 'noAmount')+(row.cadence ? ' · '+label(row.cadence) : '')+'</small></span>'
@@ -149,7 +152,7 @@ export function createSubscriptionViewRuntime({ brands = null } = {}) {
     const controlWords = language => Object.fromEntries(['language','search','service','services','filter','sort','miniTitle','listRegion','total'].map(key=>[key,words[language][key]]));
     const html = '<!doctype html><html lang="'+(lang === 'zh' ? 'zh-Hant' : 'en')+'"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer">'
       +'<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'unsafe-inline\'; style-src \'unsafe-inline\'; connect-src \'none\'; img-src data:; form-action \'none\'; base-uri \'none\'"><title>SubsNotes</title><style>'+style+contrastStyle+'</style></head><body><main id="subsnotes-read-view">'
-      +'<header><span class="brand">↻ SubsNotes</span><span class="view-mode">'+label('readView')+'</span><button id="view-language" disabled>'+escape(w.language)+'</button></header>'
+      +'<header><span class="brand">↻ SubsNotes</span><span class="view-mode'+(synthetic===true?' synthetic-mode':'')+'">'+label(synthetic===true?'synthetic':'readView')+'</span><button id="view-language" disabled>'+escape(w.language)+'</button></header>'
       +'<section class="spending" aria-label="'+escape(w.total)+'"><div class="spending-label">'+label('total','h1')+totalNotes+'</div><div class="total">'+displayTotal+'</div><div class="period">'+(snapshot.selection?.month ? escape(snapshot.selection.month) : label('allMonths'))+(converted?.minor!=null&&originals&&originalCount<=2?' <span aria-hidden="true">·</span> '+originals:'')+'</div></section>'
       +'<div class="toolbar"><label class="search">'+label('search','span',' class="sr-only"')+'<input id="view-search" type="search" aria-label="'+escape(w.search)+'" placeholder="'+escape(w.search)+'" disabled></label><label>'+label('filter','span',' class="sr-only"')+'<select id="view-state" aria-label="'+escape(w.filter)+'" disabled>'+label('all','option',' value=""')+['active','paid_access','renewal_off','needs_verification','payment_problem'].map(key=>label(key,'option',' value="'+key+'"')).join('')+'</select></label><label>'+label('sort','span',' class="sr-only"')+'<select id="view-sort" aria-label="'+escape(w.sort)+'" disabled>'+label('name','option',' value="name"')+label('next','option',' value="next"')+label('newest','option',' value="newest"')+'</select></label></div>'
       +'<div class="list-meta"><h2>'+label('miniTitle')+'</h2><p id="view-count" class="count" role="status" aria-live="polite">'+snapshot.rows.length+' '+escape(snapshot.rows.length===1?w.service:w.services)+'</p><span class="coverage">'+label(snapshot.coverage?.pending?'pendingShort':snapshot.coverage?.completedAt?'coverageShort':'noCheckShort')+'</span></div>'
@@ -158,6 +161,20 @@ export function createSubscriptionViewRuntime({ brands = null } = {}) {
       +'<footer><span class="snapshot-note">'+label('snapshotNote')+'</span>'+dataNotes+'</footer><noscript>'+label('noScript')+'</noscript></main>'
       +'<script>('+readOnlyInteractions.toString()+')('+JSON.stringify({ language:lang, words:{en:controlWords('en'),zh:controlWords('zh')} }).replace(/</g,'\\u003c')+');</scr'+'ipt></body></html>';
     return html;
+  }
+  function renderInlineHTML(snapshot, options = {}) {
+    // A host-rendered fragment inherits the host's sandbox and resource policy.
+    // Keep the standalone file's CSP; do not inject a document policy into a chat.
+    const html = renderHTML(snapshot, options);
+    const inlineStyle = (style + contrastStyle)
+      .replace('html,body{margin:0;min-width:0}body{padding:8px;background:transparent}', '')
+      .replace('height:560px;height:min(560px,calc(100vh - 16px));height:min(560px,calc(100dvh - 16px));', 'height:560px;')
+      .replace('body{padding:4px}', '')
+      .replace('height:min(560px,calc(100vh - 8px));height:min(560px,calc(100dvh - 8px));', 'height:560px;');
+    // An intrinsic height prevents a small initial iframe from feeding its own
+    // viewport height back into the host's automatic content sizing.
+    const body = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('</body>'));
+    return '<style>' + inlineStyle + '</style>' + body;
   }
   function readOnlyInteractions(config) {
     let language = config.language;
@@ -212,6 +229,7 @@ export function createSubscriptionViewRuntime({ brands = null } = {}) {
     #subsnotes-read-view *,#subsnotes-read-view *::before,#subsnotes-read-view *::after{box-sizing:border-box}#subsnotes-read-view [hidden]{display:none!important}
     #subsnotes-read-view :is(header,.spending,.toolbar,.list-meta,footer,noscript){flex-shrink:0}
     #subsnotes-read-view header{display:flex;align-items:center;gap:10px;padding:10px 14px 9px}#subsnotes-read-view .brand{font-size:16px;font-weight:750;letter-spacing:-.5px}#subsnotes-read-view .view-mode{font-size:10px;color:#53675d;margin-left:auto}#subsnotes-read-view .view-mode>span{display:block}
+    #subsnotes-read-view .synthetic-mode{display:block!important;max-width:150px;padding:3px 6px;border-radius:5px;background:#fff0d6;color:#79501e;font-size:9px}
     #subsnotes-read-view :is(button,input,select){font:inherit;color:inherit;border:1px solid #dae2d8;border-radius:7px;background:#fff;padding:7px 9px;min-width:0}#subsnotes-read-view button{cursor:pointer}#subsnotes-read-view #view-language{font-size:11px!important;padding:5px 8px!important;white-space:nowrap}#subsnotes-read-view :disabled{opacity:.65}
     #subsnotes-read-view :is(button,input,select,a,summary,#view-scroll):focus-visible{outline:3px solid #936119;outline-offset:-3px}#subsnotes-read-view a{color:#215b43;text-underline-offset:2px}
     #subsnotes-read-view .spending{margin:0 10px;padding:11px 13px;border-radius:10px;background:#193c32;color:#fff}#subsnotes-read-view .spending-label{display:flex;justify-content:space-between;align-items:center;gap:10px}#subsnotes-read-view .spending-label h1{font-size:11px;font-weight:500;line-height:1.3;letter-spacing:0;margin:0}#subsnotes-read-view .spending .total{font-size:28px;line-height:1.2;font-weight:650;letter-spacing:-.8px;font-variant-numeric:tabular-nums;margin:4px 0}#subsnotes-read-view .period{font-size:10px;line-height:1.4;color:#e1eade}#subsnotes-read-view .spending .info-popover>summary{color:#e1eade;font-size:10px;white-space:nowrap}#subsnotes-read-view .spending-label .info-popover{flex-shrink:0}
@@ -229,5 +247,5 @@ export function createSubscriptionViewRuntime({ brands = null } = {}) {
   // Host visual environments may inject dark-theme element colors. Scope the
   // light surface to this mini-app so the surrounding conversation is untouched.
   const contrastStyle = '#subsnotes-read-view{color-scheme:only light!important;color:#193c32!important;background:#f6f7f1!important}#subsnotes-read-view :is(h1,h2,h3,.brand,.initial,.arrow){color:#193c32!important}#subsnotes-read-view #view-list{background:#fff!important}#subsnotes-read-view #view-list .subscription>summary{color:#193c32!important;background:#fff!important}#subsnotes-read-view #view-list .subscription>summary:hover{background:#f5f8f0!important}#subsnotes-read-view #view-list :is(.service strong,.price strong,.price strong span,.next,.next>span,.next>time,.initial,.arrow){color:#193c32!important;-webkit-text-fill-color:currentColor!important}#subsnotes-read-view :is(.coverage,.count,.muted,small,dt,footer){color:#53675d!important}#subsnotes-read-view .detail{color:#193c32!important;background:#fff!important}#subsnotes-read-view .detail :is(dd,dd span,dd strong,dd time,.next-action,.next-action span,.next-action strong,.chat-prompt,.chat-prompt>span){color:#193c32!important}#subsnotes-read-view :is(#view-search,#view-state,#view-sort,#view-language){color:#193c32!important;background:#fff!important;border-color:#dae2d8!important;color-scheme:only light!important;-webkit-text-fill-color:#193c32!important}#subsnotes-read-view #view-search::placeholder{color:#53675d!important;opacity:1!important;-webkit-text-fill-color:#53675d!important}#subsnotes-read-view :is(#view-state,#view-sort) option{color:#193c32!important;background:#fff!important}#subsnotes-read-view .sources a{color:#215b43!important}#subsnotes-read-view .badge,#subsnotes-read-view .badge span{color:#77531c!important}#subsnotes-read-view .badge{background:#faf0db!important}#subsnotes-read-view .badge.off,#subsnotes-read-view .badge.off span{color:#604f7b!important}#subsnotes-read-view .badge.off{background:#f0edf7!important}#subsnotes-read-view .badge.problem,#subsnotes-read-view .badge.problem span{color:#8a3d27!important}#subsnotes-read-view .badge.problem{background:#f8e8df!important}#subsnotes-read-view .spending{background:#193c32!important;color:#fff!important}#subsnotes-read-view .spending :is(h1,span,strong,time,small,p,.total){color:#fff!important;-webkit-text-fill-color:currentColor!important}#subsnotes-read-view .spending .period,#subsnotes-read-view .spending .period span{color:#e1eade!important}#subsnotes-read-view .spending .popover-body :is(h2,span,strong,time,small,p,dt,dd){color:#193c32!important;-webkit-text-fill-color:currentColor!important}';
-  return { version, build, renderHTML };
+  return { version, build, renderHTML, renderInlineHTML };
 }

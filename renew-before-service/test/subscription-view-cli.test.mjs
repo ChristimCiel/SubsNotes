@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 import { createLedgerContracts } from '../src/ledger-contracts.mjs';
 
 const run = promisify(execFile);
@@ -59,4 +60,28 @@ test('portable imports cannot impersonate authenticated source reads; tampering 
     try {await run(process.execPath,[cli,'--state',input,'--output',join(dir,'malformed.html')]);assert.fail('Malformed JSON must fail');}
     catch(error){assert.match(error.stderr,/Invalid ledger JSON/);assert.doesNotMatch(error.stderr,/example-private-secret|\{"secret"/);}
   } finally {await rm(dir,{recursive:true,force:true});}
+});
+
+test('the explicit inline CLI surface preserves shared totals and private output while standalone remains the default',async()=>{
+  const dir=await mkdtemp(join(tmpdir(),'subsnotes-inline-test-'));
+  try {
+    const input=join(dir,'state.json'),output=join(dir,'inline.html'),snapshot=join(dir,'inline.json');
+    await writeFile(input,JSON.stringify(state),{mode:0o600});
+    await run(process.execPath,[cli,'--state',input,'--output',output,'--snapshot-json',snapshot,'--surface','inline']);
+    const html=await readFile(output,'utf8');
+    assert.match(html,/^<style>/);
+    assert.doesNotMatch(html,/<(?:html|head|body|meta)(?:\s|>)/i);
+    assert.match(html,/Example Tool/);
+    assert.deepEqual(JSON.parse(await readFile(snapshot,'utf8')).totals.paidMinorByCurrency,{USD:2000});
+    if(process.platform!=='win32')assert.equal((await stat(output)).mode&0o777,0o600);
+    assert.deepEqual(JSON.parse(await readFile(input,'utf8')),state);
+    await assert.rejects(run(process.execPath,[cli,'--state',input,'--output',join(dir,'unsupported.html'),'--surface','unknown']),/Use surface standalone or inline/);
+  } finally {await rm(dir,{recursive:true,force:true});}
+});
+
+test('CLI modules can be imported by an assistant executing a stdin script without trying to open stdin as a filename',async()=>{
+  const urls=[pathToFileURL(cli).href,pathToFileURL(resolve(import.meta.dirname,'../scripts/cache-service-logos.mjs')).href];
+  const code='process.argv[1]="-"; await Promise.all('+JSON.stringify(urls)+'.map(url=>import(url)));';
+  const result=await run(process.execPath,['--input-type=module','--eval',code]);
+  assert.equal(result.stdout,'');assert.equal(result.stderr,'');
 });

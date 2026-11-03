@@ -14,15 +14,16 @@ import { assertPrivateDirectory } from '../src/private-directory.mjs';
 // No network, credentials or ledger writes are involved in rendering a view.
 export async function runSubscriptionView(args, api) {
   const options = {};
-  const names = new Set(['state','output','snapshot-json','language','month','currency','as-of']);
+  const names = new Set(['state','output','snapshot-json','language','month','currency','as-of','surface','logo-cache']);
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
     if (flag === '--help') return { help: true };
-    if (!flag.startsWith('--') || !names.has(flag.slice(2)) || !args[i+1] || args[i+1].startsWith('--') || Object.hasOwn(options,flag.slice(2))) throw new Error('Use --state FILE --output FILE [--language en|zh] [--month YYYY-MM] [--currency ISO] [--snapshot-json FILE]');
+    if (!flag.startsWith('--') || !names.has(flag.slice(2)) || !args[i+1] || args[i+1].startsWith('--') || Object.hasOwn(options,flag.slice(2))) throw new Error('Use --state FILE --output FILE [--language en|zh] [--month YYYY-MM] [--currency ISO] [--surface standalone|inline] [--logo-cache PRIVATE_DIRECTORY] [--snapshot-json FILE]');
     options[flag.slice(2)] = args[++i];
   }
   if (!options.state || !options.output) throw new Error('--state and --output are required');
   if (options.language && !['en','zh'].includes(options.language)) throw new Error('Use language en or zh');
+  if (options.surface && !['standalone','inline'].includes(options.surface)) throw new Error('Use surface standalone or inline');
   if (options.currency && !Intl.supportedValuesOf('currency').includes(options.currency)) throw new Error('Unsupported display currency');
   const { fs, paths, privateDirectory, contracts, core, cashflow, fx, view, hash } = api;
   const input = paths.resolve(options.state);
@@ -39,8 +40,10 @@ export async function runSubscriptionView(args, api) {
   } else state = contracts.validateCanonicalState(raw);
   const asOf = options['as-of'] ? new Date(options['as-of']) : new Date();
   if (!Number.isFinite(Number(asOf))) throw new Error('Invalid view date');
-  const snapshot = view.build({state,core,cashflow,fx,month:options.month || null,currency:options.currency || state.prefs?.currency || null,fxSnapshot:state.fxSnapshot || null,asOf});
-  const outputs = [[options.output,view.renderHTML(snapshot,{language:options.language || 'en'})]];
+  const selectedView = options['logo-cache'] ? await api.viewForCache({directory:options['logo-cache'],state}) : view;
+  const snapshot = selectedView.build({state,core,cashflow,fx,month:options.month || null,currency:options.currency || state.prefs?.currency || null,fxSnapshot:state.fxSnapshot || null,asOf});
+  const render = options.surface === 'inline' ? selectedView.renderInlineHTML : selectedView.renderHTML;
+  const outputs = [[options.output,render(snapshot,{language:options.language || 'en'})]];
   if (options['snapshot-json']) outputs.push([options['snapshot-json'],JSON.stringify(snapshot,null,2)+'\n']);
   const targets = [];
   for (const [file,content] of outputs) {
@@ -68,12 +71,18 @@ export async function main(args = process.argv.slice(2)) {
   const result = await runSubscriptionView(args,{
     fs:{readFile,mkdir,open,lstat}, paths:{basename,dirname,resolve},
     privateDirectory:assertPrivateDirectory,contracts,hash,
-    core:createEvidenceRuntime(hash,contracts),cashflow:createCashflowRuntime(),fx:createFxRuntime(),view:createSubscriptionViewRuntime({brands:createServiceBrandsRuntime()})
+    core:createEvidenceRuntime(hash,contracts),cashflow:createCashflowRuntime(),fx:createFxRuntime(),view:createSubscriptionViewRuntime({brands:createServiceBrandsRuntime()}),
+    viewForCache:async({directory,state})=>{
+      const [{loadPublicLogoCache},{publicConnectorCatalog}]=await Promise.all([import('../src/public-logo-cache.mjs'),import('../src/connector-catalog.mjs')]);
+      const brands=await loadPublicLogoCache(directory,{catalog:publicConnectorCatalog,bundled:createServiceBrandsRuntime(),requests:state.events.map(event=>({serviceKey:event.serviceKey,name:event.service}))});
+      return createSubscriptionViewRuntime({brands});
+    }
   });
-  if (result.help) console.log('Render a private, dated read-only view: --state FILE --output FILE [--language en|zh] [--month YYYY-MM] [--currency ISO] [--snapshot-json FILE]. No network calls. A raw ledger must come from actual host reads; validation does not authenticate a source. Portable imports require source rechecks. Existing output files are never overwritten.');
+  if (result.help) console.log('Render a private, dated read-only view: --state FILE --output FILE [--language en|zh] [--month YYYY-MM] [--currency ISO] [--surface standalone|inline] [--logo-cache PRIVATE_DIRECTORY] [--snapshot-json FILE]. Inline output is a fragment for a compatible sandboxed host, not a standalone page or an authorization grant. Optional artwork is read locally from a separately prepared private public-catalog cache. No network calls. A raw ledger must come from actual host reads; validation does not authenticate a source. Portable imports require source rechecks. Existing output files are never overwritten.');
   else console.log(`Created a private read-only view with ${result.rows} service rows.${result.imported ? ' Imported evidence requires source rechecks.' : ''} No ledger was changed.`);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(await realpath(process.argv[1])).href) {
+const invokedPath = process.argv[1] ? await realpath(process.argv[1]).catch(()=>null) : null;
+if (invokedPath && import.meta.url === pathToFileURL(invokedPath).href) {
   main().catch(error=>{console.error(error.code ? 'Private file access failed ('+String(error.code).replace(/[^A-Z0-9_]/g,'')+')' : error.message);process.exitCode=1;});
 }

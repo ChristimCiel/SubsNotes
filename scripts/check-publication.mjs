@@ -62,7 +62,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   const paths = execFileSync('git', args, { encoding: 'utf8' }).split('\0').filter(Boolean);
   let failed = 0;
   for (const path of paths) {
-    const data = staged ? execFileSync('git', ['show', ':' + path]) : readFileSync(path);
+    let data;
+    try {
+      data = staged ? execFileSync('git', ['show', ':' + path], { maxBuffer:16 * 1024 * 1024 }) : readFileSync(path);
+    } catch {
+      failed++;
+      console.error('Publication blocked: a candidate file could not be read within the scan bounds. File contents are intentionally not logged.');
+      continue;
+    }
     if (data.includes(0)) continue; // Do not interpret binary assets as text.
     const issues = publicationProblems(path, data.toString('utf8'));
     if (issues.length) { failed++; console.error(`${path}: ${issues.join(', ')}`); }

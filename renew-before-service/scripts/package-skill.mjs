@@ -11,7 +11,8 @@ const files = [
   ['dist/subsnotes-claude.html','assets/subsnotes-claude.html'],
   ['scripts/subscription-view.mjs','scripts/subscription-view.mjs'],
   ['scripts/assistant-sync.mjs','scripts/assistant-sync.mjs'],
-  ...['ledger-contracts','evidence-runtime','cashflow','fx','service-brands','subscription-view','private-directory','assistant-sync','claude-store','claude-gmail','web-sync','web-evidence','receipt-verification'].map(name=>['src/'+name+'.mjs','src/'+name+'.mjs'])
+  ['scripts/cache-service-logos.mjs','scripts/cache-service-logos.mjs'],
+  ...['ledger-contracts','evidence-runtime','cashflow','fx','service-brands','connector-catalog','public-logo-cache','file-lock','subscription-view','private-directory','assistant-sync','claude-store','claude-gmail','web-sync','web-evidence','receipt-verification'].map(name=>['src/'+name+'.mjs','src/'+name+'.mjs'])
 ];
 const stage = await mkdtemp(join(tmpdir(),'subsnotes-skill-'));
 try {

@@ -1,6 +1,6 @@
 {
   "name": "subsnotes",
-  "version": "0.2.0-alpha.3",
+  "version": "0.2.0-alpha.4",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -19,6 +19,7 @@
     "package:reader": "npm --prefix renew-before-service run package:mcpb",
     "package:claude-web": "npm --prefix renew-before-service run package:claude-web",
     "package:skill": "npm --prefix renew-before-service run package:skill",
-    "view": "npm --prefix renew-before-service run view --"
+    "view": "npm --prefix renew-before-service run view --",
+    "cache:logos": "node renew-before-service/scripts/cache-service-logos.mjs"
   }
 }

@@ -1,5 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {mkdtempSync,writeFileSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {execFileSync,spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import { publicationProblems } from './check-publication.mjs';
 
 test('internal maintainer documents are blocked independently of secrets', () => {
@@ -54,4 +59,19 @@ test('IPv6 privacy checks allow loopback/documentation and reject other host lit
   assert.deepEqual(publicationProblems('style.css','button::before { color: red; } p::after { display: block; }'),[]);
   const address='fd00'+'::'+'1234';
   assert.ok(publicationProblems('config.json',address).includes('non-loopback IPv6 literal'));
+});
+
+test('staged scans handle large public catalogs and redact sensitive values after the first MB',()=>{
+  const directory=mkdtempSync(join(tmpdir(),'subsnotes-publication-'));
+  try {
+    execFileSync('git',['init','-q'],{cwd:directory});
+    const file=join(directory,'catalog.mjs'),padding='// public catalog fixture\n'.repeat(90_000);
+    writeFileSync(file,padding);execFileSync('git',['add','catalog.mjs'],{cwd:directory});
+    const script=fileURLToPath(new URL('./check-publication.mjs',import.meta.url));
+    const scan=()=>spawnSync(process.execPath,[script,'--staged'],{cwd:directory,encoding:'utf8'});
+    assert.equal(scan().status,0);
+    const mailbox='synthetic-test'+'@'+'gmail.com';
+    writeFileSync(file,padding+'// '+mailbox);execFileSync('git',['add','catalog.mjs'],{cwd:directory});
+    const blocked=scan();assert.equal(blocked.status,1);assert.match(blocked.stderr,/personal mailbox literal/);assert.ok(!(blocked.stdout+blocked.stderr).includes(mailbox));
+  } finally {rmSync(directory,{recursive:true,force:true});}
 });

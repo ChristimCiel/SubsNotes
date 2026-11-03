@@ -153,6 +153,55 @@ test('an empty read view provides an honest next action in both languages', () =
   assert.throws(()=>view.renderHTML({...snapshot,version:2}),/supported/);
 });
 
+test('inline fragments reuse the same dated records and controls without a document wrapper or viewport sizing loop', () => {
+  const snapshot = build([receipt('inline')]);
+  for (const language of ['en','zh']) {
+    const standalone = view.renderHTML(snapshot,{language});
+    const inline = view.renderInlineHTML(snapshot,{language});
+    assert.match(standalone,/^<!doctype html>/);
+    assert.match(standalone,/connect-src 'none'/);
+    assert.match(inline,/^<style>/);
+    assert.doesNotMatch(inline,/<(?:html|head|body|meta)(?:\s|>)/i);
+    assert.doesNotMatch(inline,/Content-Security-Policy/);
+    assert.doesNotMatch(inline,/html,body|body\{padding:/);
+    assert.doesNotMatch(inline,/height:min\(560px,calc\(100d?vh/);
+    assert.match(inline,/max-width:760px;height:560px/);
+    assert.match(inline,/id="view-scroll" role="region" tabindex="0"/);
+    const standaloneBody = standalone.slice(standalone.indexOf('<body>')+6,standalone.lastIndexOf('</body>'));
+    assert.equal(inline.slice(inline.indexOf('</style>')+8),standaloneBody);
+    assert.deepEqual([...inline.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match=>match[1]),[...standalone.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match=>match[1]));
+  }
+});
+
+test('inline rendering remains escaped, read-only and self-contained when the factory is embedded in a host', () => {
+  const snapshot = build([receipt('inline-hostile',{service:'<script>alert(1)</script>',plan:'<img src=x onerror=alert(1)>'})]);
+  const embedded = vm.runInNewContext('('+createSubscriptionViewRuntime.toString()+')()');
+  const html = embedded.renderInlineHTML(snapshot);
+  assert.match(html,/&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.doesNotMatch(html,/<img src=x|<script>alert\(1\)/);
+  assert.match(html,/Read-only snapshot/);
+  assert.match(html,/This view does not update itself/);
+  assert.doesNotMatch(html,/fetch\(|window\.claude|window\.openai|localStorage/);
+  assert.throws(()=>embedded.renderInlineHTML({...snapshot,version:2}),/supported/);
+});
+
+test('synthetic views identify their data and cannot open a real mailbox while real receipt links remain unchanged',()=>{
+  const snapshot=build([receipt('synthetic-source')]);
+  const before=JSON.stringify(snapshot);
+  const real=view.renderHTML(snapshot);
+  assert.match(real,/href="https:\/\/mail\.google\.com\/mail\/#all\/synthetic-source"/);
+  assert.doesNotMatch(real,/Synthetic demo/);
+  for(const language of ['en','zh'])for(const render of [view.renderHTML,view.renderInlineHTML]){
+    const demo=render(snapshot,{language,synthetic:true});
+    assert.match(demo,/Synthetic demo · no Gmail access/);
+    assert.match(demo,/合成來源・不會開啟信箱/);
+    assert.match(demo,/class="view-mode synthetic-mode"/);
+    assert.doesNotMatch(demo,/mail\.google\.com|href="https:/);
+    assert.match(demo,/USD\s*144\.00/);
+  }
+  assert.equal(JSON.stringify(snapshot),before);
+});
+
 test('duplicate providers get local account labels without revealing account identifiers', () => {
   const snapshot = build([receipt('account-1',{accountRef:'PRIVATE-ONE'}),receipt('account-2',{accountRef:'PRIVATE-TWO'})]);
   assert.deepEqual(snapshot.rows.map(row=>[row.accountOrdinal,row.accountCount]),[[1,2],[2,2]]);
