@@ -25,7 +25,8 @@ export async function buildAudit(directory, { asOf = new Date().toISOString(), s
   const events = messages.flatMap(message => extractEvidence({ ...message, mailboxEmail: message.mailboxEmail || mailboxEmail }));
   if (!scanState) { try { scanState = JSON.parse(await readFile(join(directory, 'scan-state.json'), 'utf8')); } catch { /* Projection time is not scan time. */ } }
   const snapshot = projectEvidence(events, { asOf, coverage: {
-    messageCount: messages.length, queryWindow: '2 years', method: 'Gmail connector targeted searches',
+    messageCount: messages.length, queryWindow: null, method: 'Imported Gmail evidence',
+    queryCoverage: scanState?.queryCoverage || [],
     exhaustiveMailboxAudit: false, mailboxCheckedAt: scanState?.lastCompletedAt || null,
     backgroundUpdatesConfigured: scanState?.backgroundUpdatesConfigured === true,
     note: 'Only billing-related queries were inspected. Absence of evidence is not proof of cancellation.'

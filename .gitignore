@@ -30,6 +30,7 @@ private-audit/
 **/evidence.json
 **/scan-state.json
 **/review.html
+**/subsnotes-private-*.json
 *.sqlite*
 *.db*
 client_secret*.json

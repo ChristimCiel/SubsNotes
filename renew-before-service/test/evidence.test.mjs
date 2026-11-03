@@ -1,12 +1,44 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { extractEvidence, projectEvidence, parseDay, money, htmlToText } from '../src/evidence.mjs';
+// Synthetic receipt scenarios; never paste personal receipts into test fixtures.
 const asOf = '2026-11-02T10:00:00Z';
 const message = (id, sender, subject, text, receivedAt = '2026-10-05T10:00:00Z') => ({ id, sender, subject, text, receivedAt, authenticatedSenderDomain: sender.split('@')[1] });
 const claude = (id, subject, text, day) => message(id, 'billing@mail.anthropic.com', subject, text, day + 'T10:00:00Z');
 
+test('a dated Substack payment receipt establishes its amount and full paid period without using delivery time',()=>{
+  const [event]=extractEvidence(message('fictional-newsletter','billing@substack.com',"Your payment receipt from Lenny's Newsletter #EXAMPLE-8",'Subscription for reader@example.invalid Jan 8, 2026 through Jan 8, 2027 $231.40 USD. This is your receipt for invoice #EXAMPLE-8 on Jan 8, 2026.','2026-01-09T00:00:00Z'));
+  assert.equal(event.kind,'payment_succeeded');assert.equal(event.payment.minor,23140);assert.equal(event.payment.currency,'USD');
+  assert.equal(event.paymentDay,'2026-01-08');assert.equal(event.period.end,'2027-01-08');assert.equal(event.cadence,'annual');
+});
+
+test('a multiyear prepaid period with a generic yearly-renewal footer is not an annual billing cadence',()=>{
+  const [event]=extractEvidence(message('fictional-long-plan','billing@surfshark.com','Subscription receipt','Paid January 8, 2026. Jan 8, 2026–May 8, 2028 Amount paid USD 47.90\nRenewal can be monthly or yearly depending on subscription type.'));
+  assert.equal(event.cadence,null);assert.equal(event.period.end,'2028-05-08');
+});
+
+test('a reviewed provider invoice can show an amount without creating a payment or clearing a payment problem',()=>{
+  const issue=extractEvidence(message('fictional-failure','billing@youtube.com','Payment failed','Your payment failed.'))[0];
+  const invoice={...issue,id:'fictional-invoice',messageId:'fictional-invoice-mail',receivedAt:'2026-10-06T00:00:00Z',kind:'invoice_recorded',invoiceAmount:{minor:32100,currency:'TWD'},invoiceDay:'2026-10-06'};
+  const s=projectEvidence([issue,invoice],{asOf});assert.equal(s.payments.length,0);assert.equal(s.subscriptions[0].lastInvoice.minor,32100);assert.equal(s.subscriptions[0].status,'payment_problem');
+});
+
+test('Adobe bundles do not silently become Stock and an explicit Creative Cloud cancellation has its own identity',()=>{
+  const [cc]=extractEvidence(message('fictional-adobe-cc','billing@adobe.com','Cancellation confirmed','ADOBE CREATIVE CLOUD. Your subscription was canceled. Creative Cloud Pro.'));
+  assert.equal(cc.serviceKey,'adobe-creative-cloud');
+  const bundled=extractEvidence(message('fictional-adobe-bundle','billing@adobe.com','Your receipt','Adobe Stock and Creative Cloud Pro. Amount paid TWD 1729.00'));
+  assert.ok(bundled.every(e=>e.serviceKey!=='adobe-stock'&&e.serviceKey!=='adobe-creative-cloud'));
+});
+
+test('an explicit charge timestamp is retained for local display and a cancellation clears it',()=>{
+  const sub={id:'fictional-time',messageId:'fictional-time-mail',serviceKey:'fictional',service:'Fictional',category:'Software',authenticated:true,receivedAt:'2026-10-01T00:00:00Z',kind:'subscription_confirmed',nextBilling:'2027-02-03',nextBillingAt:'2027-02-03T18:30:00Z'};
+  assert.equal(projectEvidence([sub],{asOf}).subscriptions[0].nextBillingAt,sub.nextBillingAt);
+  const canceled={...sub,id:'fictional-off',receivedAt:'2026-10-02T00:00:00Z',kind:'renewal_disabled',accessEnds:'2027-02-03'};
+  assert.equal(projectEvidence([sub,canceled],{asOf}).subscriptions[0].nextBillingAt,null);
+});
+
 test('exact minor units, ISO currencies and calendar validation', () => {
-  assert.deepEqual(money('NT$6,289.50'), { minor: 628950, currency: 'TWD', source: 'NT$6,289.50' });
+  assert.deepEqual(money('NT$4,321.50'), { minor: 432150, currency: 'TWD', source: 'NT$4,321.50' });
   assert.equal(money('$10.36').currency, null);
   assert.equal(money('EUR 0.00').minor, 0);
   assert.equal(money('JPY 1500').minor, 1500);
@@ -22,21 +54,21 @@ test('exact minor units, ISO currencies and calendar validation', () => {
 
 test('receipt paid amount differs from full price and a credit-adjusted charge', () => {
   const [e] = extractEvidence(claude('upgrade', 'Your receipt from Anthropic',
-    'Receipt number ABC-123 Invoice number BILL-2 Oct 4–Nov 4, 2026 Max plan - 20x Qty 1 NT$6,000.00 Unused time on Max plan - 5x -NT$2,332.18 VAT NT$183.39 Amount paid NT$3,851.21', '2026-10-05'));
-  assert.equal(e.payment.minor, 385121); assert.equal(e.recurringRate.minor, 600000);
+    'Receipt number ABC-123 Invoice number BILL-2 Oct 4–Nov 4, 2026 Max plan - 20x Qty 1 NT$4,500.00 Unused time on Max plan - 5x -NT$2,126.90 VAT NT$118.65 Amount paid NT$2,491.75', '2026-10-05'));
+  assert.equal(e.payment.minor, 249175); assert.equal(e.recurringRate.minor, 450000);
   assert.equal(e.hasAdjustments, true); assert.equal(e.period.end, '2026-11-04');
 });
 
 test('latest cancellation wins over an earlier receipt; paid access remains', () => {
   const events = [
     ...extractEvidence(claude('confirm', 'Your Max subscription is confirmed', 'The next charge will be on Oct 28, 2026.', '2026-09-28')),
-    ...extractEvidence(claude('receipt', 'Your receipt from Anthropic', 'Oct 4–Nov 4, 2026 Max plan - 20x Qty 1 TWD 6000 Amount paid TWD 3851.21', '2026-10-05')),
+    ...extractEvidence(claude('receipt', 'Your receipt from Anthropic', 'Oct 4–Nov 4, 2026 Max plan - 20x Qty 1 TWD 4500 Amount paid TWD 2491.75', '2026-10-05')),
     ...extractEvidence(claude('cancel', 'Your Claude Max subscription was canceled', 'Your subscription to Claude Max has been successfully canceled. Your access to Claude Max will expire on Nov 5, 2026.', '2026-10-07'))
   ];
   const result = projectEvidence(events.reverse(), { asOf });
   assert.equal(result.subscriptions[0].renewal, 'off'); assert.equal(result.subscriptions[0].access, 'available');
   assert.equal(result.subscriptions[0].accessEnds, '2026-11-05'); assert.equal(result.subscriptions[0].nextBilling, null);
-  assert.equal(result.recordedPaidMinorByCurrency.TWD, 385121);
+  assert.equal(result.recordedPaidMinorByCurrency.TWD, 249175);
 });
 
 test('an explicit restart reopens renewal; a later receipt alone does not', () => {
@@ -49,7 +81,7 @@ test('an explicit restart reopens renewal; a later receipt alone does not', () =
 
 test('annual receipts include both years and do not require a recent 90-day receipt', () => {
   const e = extractEvidence(message('annual', 'billing@stripe.com', 'Your receipt from X #123',
-    'Mar 23, 2026–Mar 23, 2027 X Premium Plus Qty 1 NT$12,930.00 Amount paid NT$12,930.00'));
+    'Mar 23, 2026–Mar 23, 2027 X Premium Plus Qty 1 NT$8,340.00 Amount paid NT$8,340.00'));
   const view = projectEvidence(e, { asOf });
   assert.equal(view.subscriptions[0].cadence, 'annual'); assert.equal(view.subscriptions[0].status, 'paid_access');
   assert.equal(view.subscriptions[0].accessEnds, '2027-03-23'); assert.equal(view.oneTimePurchases.length, 0);
@@ -57,18 +89,18 @@ test('annual receipts include both years and do not require a recent 90-day rece
 
 test('Paddle confirmed renewal price includes currency and annual date', () => {
   const e = extractEvidence(message('paddle', 'help@paddle.com', 'Your subscription to Vibe Tech Co., Ltd',
-    '逐字飽 pro_yearly NT$6,289.50 Amount every year Payment method NT$6,289.50 Your subscription will renew at NT$6,289.50 on Feb 1, 2027 6:38 pm UTC'));
+    '逐字飽 pro_yearly NT$4,321.50 Amount every year Payment method NT$4,321.50 Your subscription will renew at NT$4,321.50 on Feb 1, 2027 6:38 pm UTC'));
   const view = projectEvidence(e, { asOf });
   assert.equal(view.subscriptions[0].nextCharge.currency, 'TWD');
-  assert.equal(view.subscriptions[0].nextCharge.minor, 628950); assert.equal(view.subscriptions[0].nextBilling, '2027-02-01');
+  assert.equal(view.subscriptions[0].nextCharge.minor, 432150); assert.equal(view.subscriptions[0].nextBilling, '2027-02-01');
 });
 
 test('trial/promo confirmation records the cancellation deadline without inventing a charge date', () => {
   const e = extractEvidence(message('paddle-n8n', 'help@paddle.com', 'Welcome to Cloud Start Yearly',
-    'Thank you for signing up for your Cloud Start Yearly subscription. n8n Promo Price €0.00 Price €252.00/year Your subscription will renew at €252.00 unless you cancel by 11th April 2027.'));
+    'Thank you for signing up for your Cloud Start Yearly subscription. n8n Promo Price €0.00 Price €288.00/year Your subscription will renew at €288.00 unless you cancel by 11th April 2027.'));
   const view = projectEvidence(e, { asOf });
   assert.equal(view.subscriptions[0].status, 'active'); assert.equal(view.subscriptions[0].nextBilling, null);
-  assert.equal(view.subscriptions[0].cancelBy, '2027-04-11'); assert.equal(view.subscriptions[0].nextCharge.minor, 25200);
+  assert.equal(view.subscriptions[0].cancelBy, '2027-04-11'); assert.equal(view.subscriptions[0].nextCharge.minor, 28800);
   assert.equal(view.payments.length, 0);
 });
 
@@ -87,6 +119,13 @@ test('delivery and airfare do not become recurring costs; top-ups are not double
 test('unknown receipts remain unclassified rather than being called one-time purchases', () => {
   const e = extractEvidence(message('unknown', 'billing@merchant.example', 'Your receipt from Example', 'Amount paid USD 10'));
   assert.equal(e[0].kind, 'unclassified_purchase');
+});
+
+test('one-time delivery and top-up amounts retain fractional minor units',()=>{
+  const delivery=extractEvidence(message('synthetic-fractional-delivery','billing@lalamove.com','送貨收據','您的配送收據 總價 (TWD) NT$412.75'))[0];
+  const topup=extractEvidence(message('synthetic-fractional-topup','billing@lalamove.com','儲值收據','總付款金額 NT$20.55'))[0];
+  assert.equal(delivery.payment.minor,41275);assert.equal(topup.payment.minor,2055);
+  assert.deepEqual(projectEvidence([delivery,topup],{asOf}).recordedPaidMinorByCurrency,{});
 });
 
 test('bare dollar symbols never inherit USD, and a late payment cannot silently close a failure notice', () => {
@@ -216,4 +255,10 @@ test('ChatGPT plan confirmation records the stated rate without inventing a paid
   const v = projectEvidence(extractEvidence(message('chatgpt-new', 'noreply@tm.openai.com', 'ChatGPT - 你的新方案', '你已成功訂閱 ChatGPT Plus。你的訂閱方案將自動續訂：monthly.。總計：NT$690.00')), { asOf });
   assert.equal(v.subscriptions[0].cadence, 'monthly'); assert.equal(v.subscriptions[0].recurringRate.minor, 69000);
   assert.equal(v.payments.length, 0);
+});
+
+
+test('a domain-less Cloudflare invoice notification cannot create a phantom subscription',()=>{
+  const events=extractEvidence(message('fictional-domain-tax-notice','noreply@notify.cloudflare.com','eGUI Issuance Notification','An electronic invoice has been issued.'));
+  assert.equal(events[0].kind,'unclassified_purchase');const s=projectEvidence(events,{asOf});assert.equal(s.subscriptions.length,0);assert.equal(s.payments.length,0);assert.equal(s.unclassifiedPurchases.length,1);
 });

@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { isIP } from 'node:net';
 
 // Generic rules only. Never put a maintainer's private identifiers in this public file.
 export function publicationProblems(path, text) {
@@ -15,7 +16,7 @@ export function publicationProblems(path, text) {
   }
   if ((/^\.env(?:\.|$)/.test(file) && file !== '.env.example') ||
       /^(?:GmailDesktopClient|client_secret.*|messages-\d+|snapshot|evidence|scan-state)\.json$/.test(file) ||
-      file === 'review.html' || /(?:^|\/)(?:\.private|private-audit|node_modules)(?:\/|$)/.test(path)) {
+      /^subsnotes-private-.*\.json$/i.test(file) || file === 'review.html' || /(?:^|\/)(?:\.private|private-audit|node_modules)(?:\/|$)/.test(path)) {
     problems.push('private or generated file');
   }
   const rules = [
@@ -23,7 +24,9 @@ export function publicationProblems(path, text) {
     ['Windows user path', /[A-Za-z]:\\Users\\(?!runneradmin\\|example\\|YOUR_USER\\)[^\\\s"'<>]+/],
     ['personal mailbox literal', /\b[A-Z0-9._%+-]+@(?:gmail|yahoo|outlook|hotmail|icloud|protonmail)\.com\b/i],
     ['credential material', /\b(?:ya29\.[A-Za-z0-9_-]{12,}|GOCSPX-[A-Za-z0-9_-]+|gh[pousr]_[A-Za-z0-9]{24,}|sk-(?:proj-|ant-)?[A-Za-z0-9_-]{24,})\b/],
-    ['private key', /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/]
+    ['private key', /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/],
+    ['private assistant link', /https:\/\/claude\.ai\/(?:chat|artifact|code\/artifact)\/[a-z0-9-]{20,}/i],
+    ['private Gmail source link', /https:\/\/mail\.google\.com\/mail\/[^\s"'<>]*#(?:all|inbox)\/[a-f0-9]{16,}/i]
   ];
   for (const [label, pattern] of rules) if (pattern.test(text)) problems.push(label);
   for (const value of text.matchAll(/(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])/g)) {
@@ -32,6 +35,23 @@ export function publicationProblems(path, text) {
     const documentation = (n[0] === 192 && n[1] === 0 && n[2] === 2) ||
       (n[0] === 198 && n[1] === 51 && n[2] === 100) || (n[0] === 203 && n[1] === 0 && n[2] === 113);
     if (n[0] !== 127 && !documentation) { problems.push('non-loopback IPv4 literal'); break; }
+  }
+  for(const match of text.matchAll(/(?<![\w:])(?:[a-f0-9]{0,4}:){2,}[a-f0-9:.]+(?:%[a-z0-9_.-]+)?(?![\w:])/gi)){
+    const address=match[0].split('%')[0];
+    if(isIP(address)===6&&address!=='::1'&&!/^2001:db8:/i.test(address)){problems.push('non-loopback IPv6 literal');break;}
+  }
+  if(/\.json$/i.test(path)){
+    try{
+      const pending=[JSON.parse(text)];
+      while(pending.length){const value=pending.pop();if(!value||typeof value!=='object')continue;
+        const mailId=value.messageId||value.sourceId||value.id;
+        if(typeof value.mailboxHash==='string'&&/^[a-f0-9]{64}$/i.test(value.mailboxHash)&&('events'in value||'eventChunks'in value)
+          ||typeof mailId==='string'&&/^[a-f0-9]{16,64}$/i.test(mailId)&&('plaintextBody'in value||'payment'in value||'kind'in value||'bodyAvailable'in value||value.payload?.headers)){
+          problems.push('private mail or financial dataset');break;
+        }
+        for(const child of Object.values(value))if(child&&typeof child==='object')pending.push(child);
+      }
+    }catch{/* Ordinary source text and intentionally incomplete JSON examples are handled by the other checks. */}
   }
   return [...new Set(problems)];
 }

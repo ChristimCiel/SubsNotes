@@ -1,0 +1,30 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { createEvidenceRuntime } from '../src/evidence-runtime.mjs';
+import { runInNewContext } from 'node:vm';
+import { webcrypto, createHash } from 'node:crypto';
+
+test('the distributable preserves receipt regexes, compiles without module imports and embeds no ledger', async () => {
+  await promisify(execFile)(process.execPath, [fileURLToPath(new URL('../scripts/package-claude-web.mjs', import.meta.url))]);
+  const html=await readFile(new URL('../dist/subsnotes-claude.html',import.meta.url),'utf8');
+  const scripts=[...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+  assert.equal(scripts.length,1);
+  assert.doesNotThrow(()=>new Function(scripts[0][1]));
+  assert.ok(scripts[0][1].includes(createEvidenceRuntime.toString()));
+  assert.ok(!scripts[0][1].includes('node:crypto'));
+  assert.match(html,/data\/users\//);
+  assert.match(html,/events:\[\]/);
+  const source=scripts[0][1].replace(/\nmountClaudeDashboard\(\{/,'\nglobalThis.factories = ({');
+  const context={TextEncoder,TextDecoder,crypto:webcrypto,Intl,Date};
+  runInNewContext(source,context);
+  const f=context.factories,core=f.createEvidenceRuntime(value=>createHash('sha256').update(value).digest('hex'));
+  assert.equal(typeof core.projectEvidence,'function');
+  assert.equal(typeof f.createLedgerContracts().billingExcerpt,'function');
+  const sync=f.createWebSync({gmail:{},store:{},extract:async()=>[],hash:async()=> 'a'.repeat(64)});
+  assert.equal(typeof sync.run,'function');
+  assert.equal(f.createSubscriptionViewRuntime().version,1);
+});

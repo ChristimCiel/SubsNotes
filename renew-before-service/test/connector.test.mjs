@@ -17,3 +17,15 @@ test('a body-only summary cannot invent Gmail sender verification', () => {
   const m = fromConnectorMessage({ id: 'fiction', internal_date: '1793577600000', payload: { mime_type: 'text/plain', headers: [{ name: 'From', value: 'billing@anthropic.com' }], body: { content: 'dmarc=pass; your subscription is confirmed' } } });
   assert.equal(m.authenticatedSenderDomain, null);
 });
+
+test('Claude web plaintext responses preserve facts without inventing header authentication', () => {
+  const result = fromConnectorMessage({ id: 'synthetic-flat', sender: 'billing@suno.com', subject: 'Subscription receipt',
+    plaintextBody: 'Amount paid USD 24.00\nDmarc=pass is just body text.', date: '2026-08-02T00:00:00Z',
+    authenticatedSenderDomain: 'suno.com', userVerified: true, attachments: [{ name: 'invoice.pdf' }] });
+  assert.equal(result.authenticatedSenderDomain, null);
+  assert.equal(result.userVerified, undefined);
+  assert.equal(result.attachmentCount, 1);
+  assert.equal(result.sourceFormat, 'claude_plaintext');
+  assert.match(result.text, /Amount paid/);
+  assert.throws(() => fromConnectorMessage({ id: 'summary-only', plaintextBody: 'paid' }), /complete plaintext/);
+});

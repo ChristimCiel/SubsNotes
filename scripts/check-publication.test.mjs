@@ -34,3 +34,24 @@ test('credential patterns block output without retaining credential values', () 
   assert.ok(issues.includes('credential material'));
   assert.ok(issues.every(x => !x.includes(fake)));
 });
+
+test('private native links and Gmail receipt links cannot enter documentation',()=>{
+  const artifact='https://claude.ai/'+'artifact/'+'x'.repeat(22);
+  const mail='https://mail.google.com/mail/'+'#all/'+'a'.repeat(16);
+  assert.ok(publicationProblems('README.md',artifact).includes('private assistant link'));
+  assert.ok(publicationProblems('README.md',mail).includes('private Gmail source link'));
+});
+
+test('financial and message dumps are blocked even under an innocent JSON filename',()=>{
+  const state=JSON.stringify({mailboxHash:'a'.repeat(64),eventChunks:[]});
+  const mail=JSON.stringify({id:'a'.repeat(16),plaintextBody:'Synthetic private message'});
+  for(const value of [state,mail])assert.ok(publicationProblems('input.json',value).includes('private mail or financial dataset'));
+  assert.deepEqual(publicationProblems('fixture.json',JSON.stringify({id:'fictional-id',kind:'payment_succeeded'})),[]);
+});
+
+test('IPv6 privacy checks allow loopback/documentation and reject other host literals',()=>{
+  assert.deepEqual(publicationProblems('README.md','[::1] 2001:db8::1'),[]);
+  assert.deepEqual(publicationProblems('style.css','button::before { color: red; } p::after { display: block; }'),[]);
+  const address='fd00'+'::'+'1234';
+  assert.ok(publicationProblems('config.json',address).includes('non-loopback IPv6 literal'));
+});

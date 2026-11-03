@@ -1,6 +1,6 @@
 {
   "name": "renew-before-service",
-  "version": "0.1.0",
+  "version": "0.2.0-alpha.1",
   "private": true,
   "type": "module",
   "description": "Local subscription evidence, Gmail reconciliation and read-only assistant tools without hosted infrastructure.",
@@ -13,6 +13,9 @@
     "start": "node src/server.mjs",
     "mcp": "node src/mcp.mjs",
     "package:mcpb": "node scripts/package-mcpb.mjs",
+    "package:claude-web": "node scripts/package-claude-web.mjs",
+    "package:skill": "node scripts/package-skill.mjs",
+    "view": "node scripts/subscription-view.mjs",
     "sample": "node scripts/sample.mjs"
   },
   "dependencies": {
