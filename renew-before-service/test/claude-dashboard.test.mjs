@@ -235,3 +235,18 @@ test('bundled logos and their attribution remain static data in the empty-accoun
   assert.match(app.elements.get('brand-notice').textContent,/trademarks or registered trademarks of Vercel/);
   assert.doesNotMatch(template,/SYNTHETIC-PRIVATE|synthetic-vercel|synthetic-alpha/);
 });
+
+
+test('likely-canceled plans hide by default but remain inspectable and bilingual without changing the saved ledger',async()=>{
+  const events=[{id:'fictional-old',messageId:'fictional-old-mail',serviceKey:'fictional-old',service:'Fictional Old Plan',category:'Software',kind:'subscription_confirmed',authenticated:true,receivedAt:'2020-01-01T00:00:00Z',nextBilling:'2020-02-01'}];
+  const app=await harness({events});
+  assert.match(app.elements.get('count').textContent,/0 records · 1 likely canceled hidden/);
+  assert.doesNotMatch(app.elements.get('list').innerHTML,/data-record="fictional-old"/);
+  const filter=app.elements.get('filter');filter.value='likely_canceled';await filter.dispatch('change');
+  assert.match(app.elements.get('list').innerHTML,/Fictional Old Plan/);assert.match(app.elements.get('list').innerHTML,/Likely canceled/);
+  await app.open('fictional-old');assert.match(app.elements.get('detail-body').innerHTML,/not confirmed cancellation/);assert.match(app.elements.get('detail-body').innerHTML,/Two-month threshold/);
+  app.elements.get('detail').close();await app.elements.get('language').dispatch('click');await app.open('fictional-old');
+  assert.equal(filter.value,'likely_canceled');assert.match(app.elements.get('list').innerHTML,/可能已取消/);
+  assert.match(app.elements.get('detail-body').innerHTML,/並非確認取消/);
+  assert.deepEqual(app.persisted.events,events);
+});

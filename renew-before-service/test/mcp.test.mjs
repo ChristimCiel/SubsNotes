@@ -10,6 +10,7 @@ import { extractEvidence, projectEvidence } from '../src/evidence.mjs';
 test('real stdio MCP discovery and tools read only the configured private dataset', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'renew-before-mcp-fixture-'));
   const events = extractEvidence({ id: 'fixture-plan', sender: 'billing@anthropic.com', authenticatedSenderDomain: 'anthropic.com', subject: 'Your Max subscription is confirmed', receivedAt: '2026-11-01T00:00:00Z', text: 'Your next charge will be on Dec 1, 2026.' });
+  events.push(...extractEvidence({id:'fixture-old-plan',sender:'billing@stripe.com',authenticatedSenderDomain:'stripe.com',subject:'Your Replit subscription will renew soon',receivedAt:'2026-01-01T00:00:00Z',text:'Your subscription will renew soon This is a friendly reminder that your Replit subscription for Replit Core will automatically renew on February 1, 2026.'}));
   const snapshot = projectEvidence(events, { asOf: '2026-11-02T00:00:00Z', coverage: { messageCount: 1, exhaustiveMailboxAudit: false } });
   await writeFile(join(directory, 'snapshot.json'), JSON.stringify(snapshot));
   await writeFile(join(directory, 'evidence.json'), JSON.stringify(events));
@@ -21,7 +22,9 @@ test('real stdio MCP discovery and tools read only the configured private datase
     const tools = await client.listTools(); assert.equal(tools.tools.length, 4);
     assert.ok(tools.tools.every(t => t.annotations.readOnlyHint === true));
     const dashboard = await client.callTool({ name: 'get_dashboard', arguments: {} });
-    assert.equal(dashboard.structuredContent.counts.active, 1);
+    assert.equal(dashboard.structuredContent.counts.active, 1);assert.equal(dashboard.structuredContent.counts.likely_canceled,1);
+    const inactive=await client.callTool({name:'list_subscriptions',arguments:{status:'likely_canceled'}});
+    assert.equal(inactive.structuredContent.subscriptions.length,1);assert.equal(inactive.structuredContent.subscriptions[0].inactivityInference.confirmed,false);
     const evidence = await client.callTool({ name: 'get_evidence', arguments: { serviceKey: 'claude' } });
     assert.equal(evidence.structuredContent.evidence[0].messageId, 'fixture-plan');
     const status = await client.callTool({ name: 'get_sync_status', arguments: {} });

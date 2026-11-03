@@ -37,6 +37,8 @@ export function createSubscriptionViewRuntime({ brands = null } = {}) {
   Object.assign(words.zh, { source_payment:'付款信件', source_subscription:'訂閱確認信件', source_trial:'試用信件', source_cancellation:'關閉續訂信件', source_invoice:'發票信件', source_issue:'付款問題信件', source_refund:'退款信件', source_renewal:'續訂信件', source_access:'使用期限通知', source_status:'帳戶狀態信件', source_other:'原始信件', logoNotice:'服務 Logo 的權利屬於各自品牌，僅用於辨識訂閱，不代表合作或背書。程式碼授權不包含品牌商標授權。' });
   Object.assign(words.en,{synthetic:'Synthetic demo · no Gmail access',syntheticSource:'Synthetic source · no mailbox opened'});
   Object.assign(words.zh,{synthetic:'合成資料示範・不會開啟信箱',syntheticSource:'合成來源・不會開啟信箱'});
+  Object.assign(words.en,{current:'Hide likely canceled',likely_canceled:'Likely canceled',likelyHidden:'likely canceled hidden',verify_inactive:'No later charge is recorded. Check recent receipts or the provider to confirm whether this plan is still active.',inferenceNote:'Estimate, not confirmed cancellation. The expected payment is over two calendar months ago with no later charge in saved records. Email coverage may be incomplete; this does not cancel the service.',inferredOn:'Estimate evaluated',thresholdReached:'Two-month threshold',expectedPayment:'Last expected payment'});
+  Object.assign(words.zh,{current:'隱藏可能已取消',likely_canceled:'可能已取消',likelyHidden:'項可能已取消，已隱藏',verify_inactive:'未記錄後續扣款，請核對近期收據或業者帳戶，確認方案是否仍有效。',inferenceNote:'這是推測，並非確認取消。預計扣款日已超過兩個曆月，已存紀錄中沒有後續扣款。信件涵蓋可能不完整；此判斷不會取消服務。',inferredOn:'推測評估時間',thresholdReached:'兩個月門檻',expectedPayment:'上次預計扣款日'});
   function build({ state, core, cashflow, fx, month = null, currency = null, fxSnapshot = null, asOf = new Date() }) {
     if (!state || !Array.isArray(state.events) || !core?.projectEvidence || !cashflow?.summarize || !fx?.convertTotals) throw new Error('A saved ledger and the shared receipt, cashflow and FX runtimes are required');
     const generatedAt = new Date(asOf).toISOString();
@@ -60,7 +62,7 @@ export function createSubscriptionViewRuntime({ brands = null } = {}) {
       const nextAt = instant(sub.nextBillingAt) || day(sub.nextBilling);
       const accessEndsAt = instant(sub.accessEndsAt) || day(sub.accessEnds);
       const cancelBy = day(sub.cancelBy), trialEnds = day(sub.trialEnds);
-      const nextAction = sub.unresolvedPaymentProblem ? 'check_payment' : sub.renewal === 'off' ? 'off_next' : cancelBy || trialEnds ? 'check_trial'
+      const nextAction = sub.status === 'likely_canceled' ? 'verify_inactive' : sub.unresolvedPaymentProblem ? 'check_payment' : sub.renewal === 'off' ? 'off_next' : cancelBy || trialEnds ? 'check_trial'
         : !primary || !primary.currency ? 'check_price' : !nextAt && !accessEndsAt ? 'check_date' : sub.status === 'needs_verification' ? 'verify_status' : 'review_renewal';
       const sourceRecords = new Map();
       for (const event of [...events].sort((a,b)=>(instant(b.receivedAt) || '').localeCompare(instant(a.receivedAt) || ''))) {
@@ -68,7 +70,8 @@ export function createSubscriptionViewRuntime({ brands = null } = {}) {
       }
       const sources = [...sourceRecords.values()];
       return { serviceKey:'row-'+(index+1), providerServiceKey:text(providerKey,80), accountOrdinal:accountCount>1?accountOrdinal:null, accountCount:accountCount>1?accountCount:null, name:text(sub.name), category:text(sub.category), plan:text(sub.plan), cadence:['monthly','annual'].includes(sub.cadence) ? sub.cadence : null,
-        status:['active','renewal_off','paid_access','payment_problem','needs_verification'].includes(sub.status) ? sub.status : 'needs_verification', renewal:['on','off'].includes(sub.renewal) ? sub.renewal : 'unknown',
+        status:['active','renewal_off','paid_access','payment_problem','needs_verification','likely_canceled'].includes(sub.status) ? sub.status : 'needs_verification', renewal:['on','off'].includes(sub.renewal) ? sub.renewal : 'unknown',
+        inactivityInference:sub.status === 'likely_canceled' && sub.inactivityInference ? { expectedPaymentDay:day(sub.inactivityInference.expectedPaymentDay), thresholdMonths:2, thresholdDay:day(sub.inactivityInference.thresholdDay), evaluatedAt:instant(sub.inactivityInference.evaluatedAt), confirmed:false } : null,
         primaryAmount:primary, amountBasis, nextCharge:amount(sub.nextCharge), recurringRate:amount(sub.recurringRate), lastPayment:amount(sub.lastPayment), lastInvoice:amount(sub.lastInvoice),
         nextAt, accessEndsAt, cancelBy, trialEnds, startedAt:null, firstSourceAt:dates(events.map(event => instant(event.receivedAt)))[0] || null,
         lastSourceAt:dates(events.map(event => instant(event.receivedAt))).at(-1) || null,
@@ -113,7 +116,7 @@ export function createSubscriptionViewRuntime({ brands = null } = {}) {
     const rowHTML = row => {
       const trialDates = row.renewal !== 'off' ? dates([day(row.cancelBy),day(row.trialEnds),instant(row.nextAt)]) : [];
       const next = trialDates[0] || row.nextAt || row.accessEndsAt;
-      const nextLabel = trialDates.length && next === row.cancelBy ? 'cancelBy' : trialDates.length && next === row.trialEnds ? 'trialEnds' : row.nextAt ? 'nextDate' : row.accessEndsAt ? 'accessEnd' : 'nextUnknown';
+      const nextLabel = row.status === 'likely_canceled' ? 'expectedPayment' : trialDates.length && next === row.cancelBy ? 'cancelBy' : trialDates.length && next === row.trialEnds ? 'trialEnds' : row.nextAt ? 'nextDate' : row.accessEndsAt ? 'accessEnd' : 'nextUnknown';
       const status = words.en[row.status] ? row.status : 'needs_verification';
       const commandEn = words.en.askCheck+' '+row.name, commandZh = words.zh.askCheck+' '+row.name;
       const cancelEn = words.en.askCancel+' '+row.name, cancelZh = words.zh.askCancel+' '+row.name;
@@ -124,9 +127,9 @@ export function createSubscriptionViewRuntime({ brands = null } = {}) {
         +'<summary><span class="service">'+brandImage(row)+'<span class="service-text"><strong>'+escape(row.name)+'</strong><small>'+accountLabel+(accountLabel && (row.plan || row.category)?' · ':'')+(row.plan?escape(row.plan):Object.hasOwn(words.zh,row.category)?label(row.category):escape(row.category||''))+'</small></span></span>'
         +'<span class="price">'+money(row.primaryAmount)+'<small>'+label(row.amountBasis || 'noAmount')+(row.cadence ? ' · '+label(row.cadence) : '')+'</small></span>'
         +'<span class="next">'+date(next)+'<small>'+label(nextLabel)+'</small></span>'
-        +'<span class="badge '+(status === 'renewal_off' ? 'off' : status === 'payment_problem' ? 'problem' : '')+'">'+label(status)+'</span><span class="arrow" aria-hidden="true">⌄</span></summary>'
+        +'<span class="badge '+(['renewal_off','likely_canceled'].includes(status) ? 'off' : status === 'payment_problem' ? 'problem' : '')+'">'+label(status)+'</span><span class="arrow" aria-hidden="true">⌄</span></summary>'
         +'<div class="detail"><p class="next-action">'+label('action','strong')+' · '+label(words.en[row.nextAction] ? row.nextAction : 'verify_status')+'</p>'
-        +'<dl>'+fact('upcoming',money(row.nextCharge,'span'))+fact('rate',money(row.recurringRate,'span'))+fact('paid',money(row.lastPayment,'span'))+fact('servicePaid',totalList(row.paidMinorByCurrency) || label('noPayments'))+fact('nextDate',date(row.nextAt))+fact('accessEnd',date(row.accessEndsAt))+(row.cancelBy?fact('cancelBy',date(row.cancelBy)):'')+(row.trialEnds?fact('trialEnds',date(row.trialEnds)):'')+fact('start',label('unknown'))+fact('first',date(row.firstSourceAt))+fact('source',date(row.lastSourceAt))+fact('read',date(row.lastReadAt))+(row.receiptCheckedAt?fact('document',date(row.receiptCheckedAt)):'')+(row.reviewOn?fact('reviewOn',date(row.reviewOn)):'')+'</dl>'
+        +(row.inactivityInference?label('inferenceNote','p',' class="note"')+'<dl>'+fact('inferredOn',date(row.inactivityInference.evaluatedAt))+fact('thresholdReached',date(row.inactivityInference.thresholdDay))+'</dl>':'')+'<dl>'+fact('upcoming',money(row.nextCharge,'span'))+fact('rate',money(row.recurringRate,'span'))+fact('paid',money(row.lastPayment,'span'))+fact('servicePaid',totalList(row.paidMinorByCurrency) || label('noPayments'))+fact(row.status === 'likely_canceled'?'expectedPayment':'nextDate',date(row.nextAt))+fact('accessEnd',date(row.accessEndsAt))+(row.cancelBy?fact('cancelBy',date(row.cancelBy)):'')+(row.trialEnds?fact('trialEnds',date(row.trialEnds)):'')+fact('start',label('unknown'))+fact('first',date(row.firstSourceAt))+fact('source',date(row.lastSourceAt))+fact('read',date(row.lastReadAt))+(row.receiptCheckedAt?fact('document',date(row.receiptCheckedAt)):'')+(row.reviewOn?fact('reviewOn',date(row.reviewOn)):'')+'</dl>'
         +label('sourceNote','p',' class="muted"')+(warningCodes.length?'<ul class="warnings">'+warningCodes.map(key=>label('warn_'+key,'li')).join('')+'</ul>':'')+(row.warningCount>warningCodes.length?label('warning','p',' class="muted"'):'')+'<div class="sources">'+(sources || label('sourceUnavailable'))+'</div>'
         +'<div class="chat-prompts">'+label('nextSteps','small')+'<p class="chat-prompt">'+localized('“'+commandEn+'”','「'+commandZh+'」')+'</p><p class="chat-prompt">'+localized('“'+cancelEn+'”','「'+cancelZh+'」')+'</p></div>'
         +label('noCancel','small')+'</div></details>';
@@ -149,12 +152,12 @@ export function createSubscriptionViewRuntime({ brands = null } = {}) {
       +label('readonly','p')+label('noBridge','p')+label(coverageKey,'p')+(snapshot.coverage?.messagesNeedingReview?'<p>'+escape(snapshot.coverage.messagesNeedingReview)+' '+label('reviewNeeded')+'</p>':'')
       +(snapshot.coverage?.heldEvidenceCount?'<p>'+escape(snapshot.coverage.heldEvidenceCount)+' '+label('held')+'</p>':'')
       +'<dl>'+fact('generated',date(snapshot.generatedAt))+fact('completed',date(snapshot.coverage?.completedAt))+fact('saved',date(snapshot.savedAt))+fact('revision',snapshot.ledgerRevision ? escape(snapshot.ledgerRevision) : label('unknown'))+'</dl>'+label('logoNotice','p',' class="trademark"')+brandNotices.map(notice=>'<p class="trademark">'+escape(notice)+'</p>').join('')+'</div></details>';
-    const controlWords = language => Object.fromEntries(['language','search','service','services','filter','sort','miniTitle','listRegion','total'].map(key=>[key,words[language][key]]));
+    const controlWords = language => Object.fromEntries(['language','search','service','services','filter','sort','miniTitle','listRegion','total','likelyHidden'].map(key=>[key,words[language][key]]));
     const html = '<!doctype html><html lang="'+(lang === 'zh' ? 'zh-Hant' : 'en')+'"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer">'
       +'<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'unsafe-inline\'; style-src \'unsafe-inline\'; connect-src \'none\'; img-src data:; form-action \'none\'; base-uri \'none\'"><title>SubsNotes</title><style>'+style+contrastStyle+'</style></head><body><main id="subsnotes-read-view">'
       +'<header><span class="brand">↻ SubsNotes</span><span class="view-mode'+(synthetic===true?' synthetic-mode':'')+'">'+label(synthetic===true?'synthetic':'readView')+'</span><button id="view-language" disabled>'+escape(w.language)+'</button></header>'
       +'<section class="spending" aria-label="'+escape(w.total)+'"><div class="spending-label">'+label('total','h1')+totalNotes+'</div><div class="total">'+displayTotal+'</div><div class="period">'+(snapshot.selection?.month ? escape(snapshot.selection.month) : label('allMonths'))+(converted?.minor!=null&&originals&&originalCount<=2?' <span aria-hidden="true">·</span> '+originals:'')+'</div></section>'
-      +'<div class="toolbar"><label class="search">'+label('search','span',' class="sr-only"')+'<input id="view-search" type="search" aria-label="'+escape(w.search)+'" placeholder="'+escape(w.search)+'" disabled></label><label>'+label('filter','span',' class="sr-only"')+'<select id="view-state" aria-label="'+escape(w.filter)+'" disabled>'+label('all','option',' value=""')+['active','paid_access','renewal_off','needs_verification','payment_problem'].map(key=>label(key,'option',' value="'+key+'"')).join('')+'</select></label><label>'+label('sort','span',' class="sr-only"')+'<select id="view-sort" aria-label="'+escape(w.sort)+'" disabled>'+label('name','option',' value="name"')+label('next','option',' value="next"')+label('newest','option',' value="newest"')+'</select></label></div>'
+      +'<div class="toolbar"><label class="search">'+label('search','span',' class="sr-only"')+'<input id="view-search" type="search" aria-label="'+escape(w.search)+'" placeholder="'+escape(w.search)+'" disabled></label><label>'+label('filter','span',' class="sr-only"')+'<select id="view-state" aria-label="'+escape(w.filter)+'" disabled>'+label('current','option',' value="current" selected')+label('all','option',' value=""')+['active','paid_access','renewal_off','needs_verification','payment_problem','likely_canceled'].map(key=>label(key,'option',' value="'+key+'"')).join('')+'</select></label><label>'+label('sort','span',' class="sr-only"')+'<select id="view-sort" aria-label="'+escape(w.sort)+'" disabled>'+label('name','option',' value="name"')+label('next','option',' value="next"')+label('newest','option',' value="newest"')+'</select></label></div>'
       +'<div class="list-meta"><h2>'+label('miniTitle')+'</h2><p id="view-count" class="count" role="status" aria-live="polite">'+snapshot.rows.length+' '+escape(snapshot.rows.length===1?w.service:w.services)+'</p><span class="coverage">'+label(snapshot.coverage?.pending?'pendingShort':snapshot.coverage?.completedAt?'coverageShort':'noCheckShort')+'</span></div>'
       +'<div id="view-scroll" role="region" tabindex="0" aria-label="'+escape(w.listRegion)+'"><section id="view-list" aria-label="'+escape(w.miniTitle)+'">'+snapshot.rows.map(rowHTML).join('')+'</section><p id="view-no-match" class="empty" hidden>'+label('noMatch')+'</p>'
       +(!snapshot.rows.length?'<div class="empty">'+label('empty','strong')+label('emptyHelp','p')+'</div>':'')+'</div>'
@@ -183,8 +186,9 @@ export function createSubscriptionViewRuntime({ brands = null } = {}) {
       const q = $('view-search').value.trim().toLowerCase(), status = $('view-state').value, sort = $('view-sort').value;
       rows.sort((a,b) => sort === 'next' ? a.dataset.next.localeCompare(b.dataset.next) : sort === 'newest' ? b.dataset.source.localeCompare(a.dataset.source) : a.dataset.name.localeCompare(b.dataset.name));
       let count = 0;
-      for (const row of rows) { row.hidden = !row.dataset.name.includes(q) || Boolean(status && row.dataset.state !== status); if (!row.hidden) count++; list.append(row); }
-      $('view-count').textContent = count+' '+config.words[language][count === 1 ? 'service' : 'services'];
+      for (const row of rows) { row.hidden = !row.dataset.name.includes(q) || Boolean(status === 'current' ? row.dataset.state === 'likely_canceled' : status && row.dataset.state !== status); if (!row.hidden) count++; list.append(row); }
+      const hiddenLikely = status === 'current' ? rows.filter(row=>row.dataset.state === 'likely_canceled' && row.dataset.name.includes(q)).length : 0;
+      $('view-count').textContent = count+' '+config.words[language][count === 1 ? 'service' : 'services']+(hiddenLikely?' · '+hiddenLikely+' '+config.words[language].likelyHidden:'');
       $('view-no-match').hidden = !rows.length || count !== 0;
       if (resetScroll) scroller.scrollTop = 0;
     }
@@ -220,6 +224,7 @@ export function createSubscriptionViewRuntime({ brands = null } = {}) {
       image.addEventListener('error', fallback);
       if (image.complete && !image.naturalWidth) fallback();
     }
+    $('view-state').value = 'current';
     for (const id of ['view-language','view-search','view-state','view-sort']) $(id).disabled = false;
     localize();
   }

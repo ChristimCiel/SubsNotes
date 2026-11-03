@@ -4,9 +4,11 @@
 
 A free, MIT-licensed subscription ledger that turns receipt evidence into a clear list of payments, renewal dates and records needing a check. Use your existing AI assistant, or run the local report.
 
-**[Download the Claude skill](https://github.com/ChristimCiel/SubsNotes/releases/download/v0.2.0-alpha.4/subsnotes-subscription-review.zip)** · [Try the fictional demo](https://christimciel.github.io/SubsNotes/) · [All downloads](https://github.com/ChristimCiel/SubsNotes/releases)
+**[Download the Claude skill](https://github.com/ChristimCiel/SubsNotes/releases/download/v0.2.0-alpha.5/subsnotes-subscription-review.zip)** · [Try the fictional demo](https://christimciel.github.io/SubsNotes/) · [All downloads](https://github.com/ChristimCiel/SubsNotes/releases)
 
 The hosted demo uses fictional data. It does not read email, send notifications or cancel subscriptions.
+
+**Likely canceled** is an estimate, not confirmed cancellation: an explicitly recorded expected payment date is over two calendar months ago, with no later charge or conflicting evidence in the saved records. These plans are hidden by default but remain available through the state filter, with source emails and the reason shown. Missing email can make the estimate wrong. New billing evidence is re-evaluated automatically when the ledger is refreshed; payment history is preserved. SubsNotes does not cancel the provider’s plan.
 
 ## Try it in Claude
 

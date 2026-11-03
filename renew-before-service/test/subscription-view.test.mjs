@@ -112,9 +112,9 @@ test('local filter, sort and language controls work without any host or persiste
   const html = view.renderHTML(build([receipt('a')]));
   const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)][0][1];
   const element = (value = '') => ({ value, dataset:{}, disabled:true, hidden:false, textContent:'', listeners:{}, addEventListener(event,fn){this.listeners[event]=fn;} });
-  const a = element(), b = element(); a.dataset={name:'beta',state:'renewal_off',next:'2026-10-03',source:'2026-09-01'}; b.dataset={name:'alpha',state:'active',next:'2026-10-01',source:'2026-09-02'};
+  const a = element(), b = element(), c = element(); c.dataset={name:'gamma',state:'likely_canceled',next:'2026-01-01',source:'2025-12-01'}; a.dataset={name:'beta',state:'renewal_off',next:'2026-10-03',source:'2026-09-01'}; b.dataset={name:'alpha',state:'active',next:'2026-10-01',source:'2026-09-02'};
   const nodes = Object.fromEntries(['view-list','view-scroll','view-search','view-state','view-sort','view-language','view-count','view-no-match'].map(id=>[id,element()]));
-  nodes['view-list'].children=[a,b]; nodes['view-list'].append = row => { nodes['view-list'].children=nodes['view-list'].children.filter(item=>item!==row); nodes['view-list'].children.push(row); };
+  nodes['view-list'].children=[a,b,c]; nodes['view-list'].append = row => { nodes['view-list'].children=nodes['view-list'].children.filter(item=>item!==row); nodes['view-list'].children.push(row); };
   nodes['view-sort'].value='name';
   const timestamp = element(), calendarDay = element();
   timestamp.dataset.date='2026-02-01T18:38:00Z'; calendarDay.dataset.date='2026-02-01';
@@ -125,7 +125,9 @@ test('local filter, sort and language controls work without any host or persiste
   assert.match(timestamp.textContent,/Feb 2, 2026/);
   assert.match(timestamp.textContent,/GMT\+8/);
   assert.equal(calendarDay.textContent,'Feb 1, 2026');
-  assert.deepEqual(nodes['view-list'].children,[b,a]);
+  assert.deepEqual(nodes['view-list'].children,[b,a,c]);
+  assert.equal(c.hidden,true);assert.equal(nodes['view-state'].value,'current');
+  assert.equal(nodes['view-count'].textContent,'2 services · 1 likely canceled hidden');
   nodes['view-scroll'].scrollTop=420;
   nodes['view-search'].value='beta'; nodes['view-search'].listeners.input();
   assert.equal(nodes['view-scroll'].scrollTop,0);
@@ -133,10 +135,12 @@ test('local filter, sort and language controls work without any host or persiste
   nodes['view-state'].value='active'; nodes['view-state'].listeners.change();
   assert.equal(nodes['view-no-match'].hidden,false);
   nodes['view-search'].value=''; nodes['view-state'].value=''; nodes['view-sort'].value='newest'; nodes['view-sort'].listeners.change();
-  assert.deepEqual(nodes['view-list'].children,[b,a]);
+  assert.deepEqual(nodes['view-list'].children,[b,a,c]);
   nodes['view-language'].listeners.click();
   assert.equal(document.documentElement.lang,'zh-Hant');
-  assert.equal(nodes['view-count'].textContent,'2 項服務');
+  assert.equal(nodes['view-count'].textContent,'3 項服務');
+  nodes['view-state'].value='likely_canceled';nodes['view-state'].listeners.change();
+  assert.equal(c.hidden,false);assert.equal(a.hidden,true);assert.equal(b.hidden,true);assert.equal(nodes['view-count'].textContent,'1 項服務');
   assert.equal(nodes['view-search'].ariaLabel,'搜尋服務');
 });
 
@@ -317,4 +321,20 @@ test('long lists and empty states share one keyboard-accessible list region; ext
   assert.match(html,/EUR\s*10\.00/);
   assert.match(html,/JPY\s*3,000/);
   // Browser geometry is verified separately; these assertions cover only the DOM contract.
+});
+
+
+test('likely-canceled rows keep traceable dates, receipt totals and bilingual uncertainty without exporting source identifiers',()=>{
+  const initial={...receipt('fictional-inference'),kind:'subscription_confirmed',receivedAt:'2026-04-01T00:00:00Z',nextBilling:'2026-05-01',payment:undefined};
+  const snapshot=build([initial,receipt('fictional-paid',{receivedAt:'2026-04-01T00:00:00Z',paymentDay:'2026-04-01',cadence:'monthly'})]);
+  const row=snapshot.rows[0];assert.equal(row.status,'likely_canceled');assert.equal(row.nextAction,'verify_inactive');
+  assert.equal(row.inactivityInference.expectedPaymentDay,'2026-05-01');assert.equal(row.inactivityInference.thresholdDay,'2026-07-01');
+  assert.equal(row.inactivityInference.confirmed,false);assert.equal(row.inactivityInference.sourceEvidenceId,undefined);
+  assert.deepEqual(snapshot.totals.paidMinorByCurrency,{USD:14400});
+  for(const language of ['en','zh']) {
+    const html=view.renderHTML(snapshot,{language});
+    assert.match(html,/Likely canceled/);assert.match(html,/可能已取消/);assert.match(html,/not confirmed cancellation/);assert.match(html,/並非確認取消/);
+    assert.match(html,/Email coverage may be incomplete/);assert.match(html,/2026-07-01/);assert.match(html,/value="likely_canceled"/);
+    assert.match(html,/fictional-inference/);assert.match(html,/Last expected payment/);assert.match(html,/推測評估時間/);
+  }
 });

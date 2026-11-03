@@ -284,6 +284,14 @@ function extractEvidence(input) {
 
 function projectEvidence(events, { asOf = new Date().toISOString(), coverage = null, trustConnectorReads = false } = {}) {
   const today = dayOf(asOf);
+  // Calendar months, clamped at month end. This is a projection, never a
+  // cancellation event or a replacement for the provider's account status.
+  const twoMonthsAfter = day => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day || '') || parseDay(day) !== day) return null;
+    const date = new Date(day + 'T00:00:00Z'), target = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 3, 0));
+    target.setUTCDate(Math.min(date.getUTCDate(), target.getUTCDate()));
+    return dayOf(target);
+  };
   const unique = new Map(), conflicts = new Set();
   const financialIdentity = event => contracts.canonicalJSON(Object.fromEntries(['kind','serviceKey','accountRef','reference','transactionRef','lineItemRef','refundRef','payment','refund','invoiceAmount','paymentDay','refundDay','nextBilling','accessEnds','period'].filter(key=>event[key]!==undefined).map(key=>[key,event[key]])));
   for (const event of events) {
@@ -341,10 +349,12 @@ function projectEvidence(events, { asOf = new Date().toISOString(), coverage = n
       if (event.accessEnds) {group.accessEnds = event.accessEnds;group.accessEndsAt=event.accessEndsAt||null;}
       if (event.accessEnds) group.accessSourceAt = event.receivedAt;
       group.nextBilling = null; group.nextBillingAt=null;group.nextCharge = null;
+      group.nextBillingEvidenceId = null;
     } else if (event.kind === 'subscription_confirmed' || event.kind === 'trial_confirmed') {
       group.notSubscribed = false;
       group.renewal = 'on'; group.renewalSourceAt = event.receivedAt;
       group.nextBilling = event.nextBilling || null;
+      group.nextBillingEvidenceId = event.nextBilling ? event.id : null;
       group.nextBillingAt=event.nextBillingAt||null;
       group.nextCharge = event.nextCharge || null;
       group.cancelBy = event.cancelBy || null;
@@ -382,22 +392,40 @@ function projectEvidence(events, { asOf = new Date().toISOString(), coverage = n
       if(event.cadence)group.cadence=event.cadence;
       if (event.accessEnds) group.accessEnds = event.accessEnds;
       if (event.accessEnds) group.accessSourceAt = event.receivedAt;
-      if (event.nextBilling) group.nextBilling = event.nextBilling;
+      if (event.nextBilling) { group.nextBilling = event.nextBilling; group.nextBillingAt = event.nextBillingAt || null; group.nextBillingEvidenceId = event.id; }
       if (event.renewal && event.renewal !== 'unknown') { group.renewal = event.renewal; group.renewalSourceAt = event.receivedAt; }
     }
     groups.set(groupKey, group);
   }
   const subscriptions = [...groups.values()].map(group => {
     const access = !group.accessEnds || group.refundSourceAt && group.refundSourceAt >= (group.accessSourceAt || '') ? 'unknown' : group.accessEnds > today ? 'available' : group.accessEnds === today ? 'ends_today' : 'past_recorded_period';
-    const status = group.notSubscribed ? 'not_subscribed' : group.renewal === 'off' ? 'renewal_off'
+    let status = group.notSubscribed ? 'not_subscribed' : group.renewal === 'off' ? 'renewal_off'
       : group.unresolvedPaymentProblem ? 'payment_problem'
       : group.renewal === 'on' && (group.nextBilling > today || group.cancelBy > today) ? 'active'
       : access === 'available' ? 'paid_access'
       : 'needs_verification';
     const warnings = [...new Set(group.warnings)];
+    let inactivityInference = null;
+    const thresholdDay = twoMonthsAfter(group.nextBilling);
+    if (status === 'needs_verification' && thresholdDay && today > thresholdDay
+      && ![group.accessEnds, group.cancelBy, group.trialEnds].some(day => day && day >= today)) {
+      const relatedHeld = heldEvidence.some(event => scope(event) === group.serviceKey || !event.accountRef && event.serviceKey === group.providerServiceKey);
+      const laterEvidence = group.evidenceIds.some(id => {
+        const event = unique.get(id);
+        if (event.kind === 'payment_succeeded') return [event.paymentDay, event.period?.start, !event.paymentDay && !event.period?.start ? dayOf(event.receivedAt) : null].some(day => day && day >= group.nextBilling);
+        return ['subscription_confirmed','trial_confirmed','renewal_notice','invoice_recorded','access_expiring','access_expired'].includes(event.kind)
+          && event.id !== group.nextBillingEvidenceId && dayOf(event.receivedAt) >= group.nextBilling;
+      });
+      if (!relatedHeld && !laterEvidence) {
+        status = 'likely_canceled';
+        inactivityInference = { reason:'overdue_without_new_charge', expectedPaymentDay:group.nextBilling, thresholdMonths:2, thresholdDay, evaluatedAt:asOf,
+          sourceEvidenceId:group.nextBillingEvidenceId, confirmed:false };
+        warnings.push('Likely canceled is an estimate: the expected payment date is over two calendar months ago and no later charge is recorded. Missing email evidence can change this conclusion. Check the provider to confirm.');
+      }
+    }
     if (group.nextBilling && group.nextBilling <= today && group.renewal !== 'off') warnings.push('The recorded renewal date has arrived or passed. No new billing cycle was invented.');
     if (group.unresolvedPaymentProblem) warnings.push('A payment failure was recorded. Gmail does not establish whether the provider has since resolved it.');
-    return { ...group, status, access, warnings };
+    return { ...group, status, access, warnings, inactivityInference };
   }).sort((a, b) => a.name.localeCompare(b.name));
   const confirmedPayments = [...payments.values()].filter(e => !e.conflict && e.payment.currency);
   const chatgpt = subscriptions.find(s => s.serviceKey === 'chatgpt');
@@ -405,6 +433,7 @@ function projectEvidence(events, { asOf = new Date().toISOString(), coverage = n
     const laterOpenAI = unclassifiedPurchases.filter(e => e.providerKey === 'openai' && e.receivedAt > chatgpt.latestSourceAt);
     if (laterOpenAI.length) {
       chatgpt.status = 'needs_verification';
+      chatgpt.inactivityInference = null;
       chatgpt.relatedEvidenceIds = laterOpenAI.map(e => e.id);
       chatgpt.warnings.push('Newer OpenAI tax invoices are unclassified. Current ChatGPT status needs verification; these may relate to a different product.');
     }

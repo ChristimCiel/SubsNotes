@@ -180,11 +180,12 @@ test('Traditional Chinese Google Play trial is active evidence without assumed c
   assert.equal(view.payments.length, 0);
 });
 
-test('renewal notices keep their original date, even when stale', () => {
+test('stale renewal notices retain their original date and expose an unconfirmed inactivity estimate', () => {
   const e = extractEvidence(message('replit', 'billing@stripe.com', 'Your Replit subscription will renew soon', 'Your subscription will renew soon This is a friendly reminder that your Replit subscription for Replit Core will automatically renew on April 16, 2026.'));
   const view = projectEvidence(e, { asOf });
   assert.equal(view.subscriptions[0].nextBilling, '2026-04-16');
-  assert.equal(view.subscriptions[0].status, 'needs_verification');
+  assert.equal(view.subscriptions[0].status, 'likely_canceled');
+  assert.equal(view.subscriptions[0].inactivityInference.confirmed, false);
 });
 
 test('booking copies consolidate while distinct bookings remain separate', () => {
