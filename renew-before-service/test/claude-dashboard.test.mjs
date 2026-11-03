@@ -8,6 +8,7 @@ import { createEvidenceRuntime } from '../src/evidence-runtime.mjs';
 import { createCashflowRuntime } from '../src/cashflow.mjs';
 import { createFxRuntime } from '../src/fx.mjs';
 import { createSubscriptionViewRuntime } from '../src/subscription-view.mjs';
+import { createServiceBrandsRuntime } from '../src/service-brands.mjs';
 
 const flush = () => new Promise(resolve=>setImmediate(resolve));
 const clone = value => JSON.parse(JSON.stringify(value));
@@ -15,7 +16,7 @@ const template = await readFile(new URL('../src/claude-dashboard.html',import.me
 
 // A minimal DOM harness exercises the mounted handlers against delayed storage.
 // Native dialog focus and browser layout are separately verified in browser QA.
-async function harness({events=null,prefs={},freezePreferences=false}={}) {
+async function harness({events=null,prefs={},freezePreferences=false,now=null}={}) {
   const elements = new Map();
   class Element {
     constructor(id) {this.id=id;this.value='';this.textContent='';this.dataset={};this.listeners={};this.disabled=false;this.open=false;this._html='';}
@@ -40,8 +41,9 @@ async function harness({events=null,prefs={},freezePreferences=false}={}) {
   const store={load:async()=>{const state=clone(persisted);if(freezePreferences)Object.freeze(state.prefs);return state;},getRevision:async()=>persisted.storageRevision||null,save:next=>new Promise((resolve,reject)=>pendingSaves.push({next:clone(next),resolve:()=>{persisted=clone(next);resolve();},reject}))};
   const capabilities={mcp:{},db:{},user:{id:async()=>'fictional-user'},permissions:{manage(){}}};
   const window={claude:{use:async key=>capabilities[key]},addEventListener(){}};
-  const mount=vm.runInNewContext('('+mountClaudeDashboard.toString()+')',{document,window,crypto:webcrypto,TextEncoder,setInterval(){}});
-  mount({createEvidenceRuntime,createCashflowRuntime,createFxRuntime,createSubscriptionViewRuntime,extractWebEvidence(){},createClaudePersonalStore:()=>store,createClaudeRatesClient:()=>({load:async()=>{throw new Error('Rates unavailable in this test');}}),createClaudeGmailClient:()=>({}),createWebSync:()=>({run(){throw new Error('No scan is requested by these tests');}})});
+  const ClockDate = now ? class extends Date { constructor(...args){super(...(args.length?args:[now]));}static now(){return new Date(now).getTime();} } : Date;
+  const mount=vm.runInNewContext('('+mountClaudeDashboard.toString()+')',{document,window,crypto:webcrypto,TextEncoder,Date:ClockDate,setInterval(){}});
+  mount({createEvidenceRuntime,createCashflowRuntime,createFxRuntime,createSubscriptionViewRuntime,createServiceBrandsRuntime,extractWebEvidence(){},createClaudePersonalStore:()=>store,createClaudeRatesClient:()=>({load:async()=>{throw new Error('Rates unavailable in this test');}}),createClaudeGmailClient:()=>({}),createWebSync:()=>({run(){throw new Error('No scan is requested by these tests');}})});
   for(let i=0;i<4;i++)await flush();
   const open=async key=>{const button=new Element('row');button.dataset.record=key;button.closest=()=>button;await elements.get('list').dispatch('click',{target:button});};
   const change=days=>{const select=elements.get('review');select.value=String(days);return select.dispatch('change');};
@@ -137,4 +139,99 @@ test('rapid queued period and currency choices keep the latest controls and amou
   const reopened=await harness({events:periodEvents,prefs:app.persisted.prefs,freezePreferences:true});
   assert.equal(reopened.elements.get('month').value,'2026-08');assert.equal(reopened.elements.get('currency').value,'USD');
   assert.equal(reopened.elements.get('total').textContent,'Partial total · USD 30.00');
+});
+
+const syntheticReceipt = (id,extra={})=>({id,messageId:'synthetic-'+id,serviceKey:'fictional',service:'Fictional Workbench',category:'Software',kind:'payment_succeeded',authenticated:true,receivedAt:'2026-08-20T01:00:00Z',payment:{currency:'USD',minor:1200},paymentDay:'2026-08-20',paymentDateBasis:'explicit',...extra});
+
+test('unknown currencies never gain an assumed decimal scale or become zero spending',async()=>{
+  for(const language of ['en','zh']) {
+    const app=await harness({events:[syntheticReceipt('currency-unknown',{payment:{currency:null,minor:12345}})],prefs:{language}});
+    const list=app.elements.get('list').innerHTML;
+    assert.match(list,language==='zh'?/幣別待確認/:/Currency unconfirmed/);
+    assert.doesNotMatch(list,/123\.45|12345|USD\s*0\.00/);
+    assert.equal(app.elements.get('total').textContent,'—');
+    await app.open('fictional');
+    assert.match(app.elements.get('detail-body').innerHTML,language==='zh'?/幣別待確認/:/Currency unconfirmed/);
+    assert.doesNotMatch(app.elements.get('detail-body').innerHTML,/123\.45|12345|USD\s*0\.00/);
+  }
+});
+
+test('the subscription list shows the earliest trial decision deadline while details retain all dates',async()=>{
+  const trial=syntheticReceipt('trial-deadline',{kind:'trial_confirmed',payment:undefined,cancelBy:'2027-01-09',trialEnds:'2027-01-11',nextBilling:'2027-01-12',nextCharge:{currency:'USD',minor:2000},cadence:'monthly'});
+  for(const language of ['en','zh']) {
+    const app=await harness({events:[trial],prefs:{language}});
+    const list=app.elements.get('list').innerHTML;
+    assert.match(list,language==='zh'?/2027年1月9日/:/Jan 9, 2027/);
+    assert.match(list,language==='zh'?/取消期限/:/Cancel by/);
+    await app.open('fictional');
+    const details=app.elements.get('detail-body').innerHTML;
+    assert.match(details,language==='zh'?/2027年1月11日/:/Jan 11, 2027/);
+    assert.match(details,language==='zh'?/2027年1月12日/:/Jan 12, 2027/);
+    assert.doesNotMatch(details,/>check_trial</);
+  }
+});
+
+test('turning renewal off keeps the recorded access end distinct from an old trial deadline',async()=>{
+  const trial=syntheticReceipt('old-trial',{kind:'trial_confirmed',payment:undefined,cancelBy:'2027-01-09',trialEnds:'2027-01-11',nextBilling:'2027-01-12',nextCharge:{currency:'USD',minor:2000}});
+  const off=syntheticReceipt('off',{kind:'renewal_disabled',payment:undefined,receivedAt:'2026-08-21T01:00:00Z',accessEnds:'2027-01-11'});
+  const app=await harness({events:[trial,off]});
+  const list=app.elements.get('list').innerHTML;
+  assert.match(list,/Jan 11, 2027/);
+  assert.match(list,/Recorded access end/);
+  assert.doesNotMatch(list,/<small>Trial ends<\/small>/);
+});
+
+test('duplicate providers show account labels without exposing raw references in visible text or details',async()=>{
+  const first='SYNTHETIC-PRIVATE-ONE',second='SYNTHETIC-PRIVATE-TWO';
+  const events=[syntheticReceipt('one',{accountRef:first}),syntheticReceipt('two',{accountRef:second,payment:{currency:'USD',minor:2400}})];
+  const app=await harness({events});
+  const list=app.elements.get('list').innerHTML,visibleText=list.replace(/<[^>]*>/g,'');
+  assert.match(visibleText,/Account 1/);assert.match(visibleText,/Account 2/);
+  assert.ok(!visibleText.includes(first));assert.ok(!visibleText.includes(second));
+  await app.open('fictional|account:'+encodeURIComponent(first));
+  assert.equal(app.elements.get('detail-title').textContent,'Fictional Workbench · Account 1');
+  const details=app.elements.get('detail-body').innerHTML;
+  assert.ok(!details.includes(first));assert.ok(!details.includes(second));
+  assert.match(details,/USD 12\.00/);assert.doesNotMatch(details,/USD 24\.00/);
+  // Canonical scoped keys still exist in the private native DOM to route actions.
+  // This test does not claim that the runtime DOM has been anonymized or is public-safe.
+});
+
+test('Today is a real persisted review choice and can be cleared without implying a notification',async()=>{
+  const app=await harness({now:'2026-09-03T12:00:00'});await app.open('alpha');
+  assert.match(app.elements.get('review').innerHTML,/<option value="-1">Today<\/option>/);
+  assert.match(app.elements.get('detail-body').innerHTML,/No email, calendar event or push notification is sent/);
+  const today=app.change(-1);await flush();
+  assert.equal(app.pendingSaves[0].next.prefs.reviews.alpha,'2026-09-03');
+  app.pendingSaves[0].resolve();await today;
+  assert.equal(app.persisted.prefs.reviews.alpha,'2026-09-03');
+  assert.match(app.elements.get('review-result').textContent,/Review on Sep 3, 2026/);
+  app.elements.get('detail').close();await app.open('alpha');
+  assert.equal(app.elements.get('review').value,'saved');
+  const clear=app.change(0);await flush();app.pendingSaves[1].resolve();await clear;
+  assert.equal(app.persisted.prefs.reviews.alpha,undefined);
+  assert.equal(app.elements.get('review').value,'0');
+});
+
+test('a persisted review after the trial deadline warns in both languages, while Today remains within it',async()=>{
+  const trial=syntheticReceipt('short-trial',{kind:'trial_confirmed',payment:undefined,cancelBy:'2026-09-04',trialEnds:'2026-09-06',nextBilling:'2026-09-06',nextCharge:{currency:'USD',minor:2000}});
+  for(const language of ['en','zh']) {
+    const app=await harness({events:[trial],prefs:{language},now:'2026-09-03T12:00:00'});await app.open('fictional');
+    const later=app.change(7);await flush();
+    assert.equal(app.pendingSaves[0].next.prefs.reviews.fictional,'2026-09-10');
+    app.pendingSaves[0].resolve();await later;
+    assert.match(app.elements.get('review-result').textContent,language==='zh'?/已超過信件記載的期限/:/after the recorded deadline/);
+    const today=app.change(-1);await flush();app.pendingSaves[1].resolve();await today;
+    assert.equal(app.persisted.prefs.reviews.fictional,'2026-09-03');
+    assert.doesNotMatch(app.elements.get('review-result').textContent,/after the recorded deadline|已超過信件記載的期限/);
+    assert.match(app.elements.get('review').innerHTML,language==='zh'?/今天/:/Today/);
+  }
+});
+
+test('bundled logos and their attribution remain static data in the empty-account app',async()=>{
+  const app=await harness({events:[syntheticReceipt('vercel',{serviceKey:'vercel',service:'Vercel'})]});
+  assert.match(app.elements.get('list').innerHTML,/<img src="data:image\/svg\+xml;base64,/);
+  assert.doesNotMatch(app.elements.get('list').innerHTML,/<img src="https?:/);
+  assert.match(app.elements.get('brand-notice').textContent,/trademarks or registered trademarks of Vercel/);
+  assert.doesNotMatch(template,/SYNTHETIC-PRIVATE|synthetic-vercel|synthetic-alpha/);
 });

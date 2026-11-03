@@ -14,8 +14,9 @@ import { prepareAssistantSync } from '../src/assistant-sync.mjs';
 import { preserveReceiptVerification } from '../src/receipt-verification.mjs';
 import { createLedgerContracts } from '../src/ledger-contracts.mjs';
 import { createSubscriptionViewRuntime } from '../src/subscription-view.mjs';
+import { createServiceBrandsRuntime } from '../src/service-brands.mjs';
 
-const names={createLedgerContracts,createSubscriptionViewRuntime,preserveReceiptVerification,createSourceEvidenceMerger,createEvidenceRuntime,extractWebEvidence,createCashflowRuntime,createFxRuntime,createClaudeGmailClient,createClaudeRatesClient,createWebSync,createClaudePersonalStore,mergeAssistantEvidence,prepareAssistantSync,mountClaudeDashboard};
+const names={createServiceBrandsRuntime,createLedgerContracts,createSubscriptionViewRuntime,preserveReceiptVerification,createSourceEvidenceMerger,createEvidenceRuntime,extractWebEvidence,createCashflowRuntime,createFxRuntime,createClaudeGmailClient,createClaudeRatesClient,createWebSync,createClaudePersonalStore,mergeAssistantEvidence,prepareAssistantSync,mountClaudeDashboard};
 const template=await readFile(resolve(import.meta.dirname,'../src/claude-dashboard.html'),'utf8');
 const source=Object.entries(names).map(([key,value])=>`const ${key} = ${value.toString()};`).join('\n')+'\nmountClaudeDashboard({'+Object.keys(names).filter(k=>k!=='mountClaudeDashboard').join(',')+'});';
 if(source.includes('</script'))throw new Error('Inline source must not close its containing script');

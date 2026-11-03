@@ -4,7 +4,7 @@
 
 A free, MIT-licensed subscription ledger that turns receipt evidence into a clear list of payments, renewal dates and records needing a check. Use your existing AI assistant, or run the local report.
 
-**[Download the Claude skill](https://github.com/ChristimCiel/SubsNotes/releases/download/v0.2.0-alpha.2/subsnotes-subscription-review.zip)** · [Try the fictional demo](https://christimciel.github.io/SubsNotes/) · [All downloads](https://github.com/ChristimCiel/SubsNotes/releases)
+**[Download the Claude skill](https://github.com/ChristimCiel/SubsNotes/releases/download/v0.2.0-alpha.3/subsnotes-subscription-review.zip)** · [Try the fictional demo](https://christimciel.github.io/SubsNotes/) · [All downloads](https://github.com/ChristimCiel/SubsNotes/releases)
 
 The hosted demo uses fictional data. It does not read email, send notifications or cancel subscriptions.
 
@@ -17,7 +17,11 @@ The browser experience is a **preview** for accounts with Gmail, code execution,
 3. Ask: **“Use SubsNotes to find my personal subscriptions and show what I have paid. Keep the ledger private.”** Review the read-only Gmail permission prompt and check **Only you** before continuing.
 4. Keep the link to the resulting private SubsNotes Artifact. Reopen that same ledger next time, or give its link to a new Claude conversation and ask: **“Show my SubsNotes subscriptions here.”**
 
-The ZIP contains the empty-data dashboard and deterministic read-view tools. A supported assistant can show a searchable, dated read-only view inside chat. Filters and details stay in that view; ask in chat to refresh the canonical records. The visual itself is not storage and does not synchronize itself. If native private storage or in-chat visuals are unavailable, the skill explains the missing capability instead of claiming setup succeeded.
+The ZIP contains the empty-data dashboard and deterministic read-view tools. A supported assistant can show a searchable, dated read-only view inside chat. The view uses a compact panel, up to 760 × 560 pixels, with a scrolling service list and expandable details. Its surrounding iframe size remains under the host's control. Filters and details stay in that view; ask in chat to refresh the canonical records. The visual itself is not storage and does not synchronize itself. If native private storage or in-chat visuals are unavailable, the skill explains the missing capability instead of claiming setup succeeded.
+
+The generated HTML targets compatible visuals, Artifacts or full-screen surfaces. It is not a registered ChatGPT App. ChatGPT's official inline App cards prohibit nested scrolling; a registered App would need a summary card and a full-screen view instead. Claude inline visuals and Artifacts are different surfaces, and mobile availability depends on the host.
+
+Recognizable service marks are bundled only where the owner's published policy has been reviewed. OpenAI, Linear and Vercel assets are included with source and trademark notices; other services retain readable initials. No logo request sends subscription names to an external image service. Artwork and trademarks remain subject to their owners' terms, separate from the source-code MIT license.
 
 ChatGPT can review an explicitly supplied export or supported local dataset. It does **not** automatically access Claude's private store. A skill alone cannot grant account access, create a background service or cancel a plan.
 

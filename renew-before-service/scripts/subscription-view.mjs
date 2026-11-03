@@ -7,6 +7,7 @@ import { createEvidenceRuntime } from '../src/evidence-runtime.mjs';
 import { createCashflowRuntime } from '../src/cashflow.mjs';
 import { createFxRuntime } from '../src/fx.mjs';
 import { createSubscriptionViewRuntime } from '../src/subscription-view.mjs';
+import { createServiceBrandsRuntime } from '../src/service-brands.mjs';
 import { assertPrivateDirectory } from '../src/private-directory.mjs';
 
 // The standalone skill bundle embeds this function and the same factories.
@@ -67,7 +68,7 @@ export async function main(args = process.argv.slice(2)) {
   const result = await runSubscriptionView(args,{
     fs:{readFile,mkdir,open,lstat}, paths:{basename,dirname,resolve},
     privateDirectory:assertPrivateDirectory,contracts,hash,
-    core:createEvidenceRuntime(hash,contracts),cashflow:createCashflowRuntime(),fx:createFxRuntime(),view:createSubscriptionViewRuntime()
+    core:createEvidenceRuntime(hash,contracts),cashflow:createCashflowRuntime(),fx:createFxRuntime(),view:createSubscriptionViewRuntime({brands:createServiceBrandsRuntime()})
   });
   if (result.help) console.log('Render a private, dated read-only view: --state FILE --output FILE [--language en|zh] [--month YYYY-MM] [--currency ISO] [--snapshot-json FILE]. No network calls. A raw ledger must come from actual host reads; validation does not authenticate a source. Portable imports require source rechecks. Existing output files are never overwritten.');
   else console.log(`Created a private read-only view with ${result.rows} service rows.${result.imported ? ' Imported evidence requires source rechecks.' : ''} No ledger was changed.`);

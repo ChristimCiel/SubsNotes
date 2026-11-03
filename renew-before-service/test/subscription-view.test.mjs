@@ -113,12 +113,12 @@ test('local filter, sort and language controls work without any host or persiste
   const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)][0][1];
   const element = (value = '') => ({ value, dataset:{}, disabled:true, hidden:false, textContent:'', listeners:{}, addEventListener(event,fn){this.listeners[event]=fn;} });
   const a = element(), b = element(); a.dataset={name:'beta',state:'renewal_off',next:'2026-10-03',source:'2026-09-01'}; b.dataset={name:'alpha',state:'active',next:'2026-10-01',source:'2026-09-02'};
-  const nodes = Object.fromEntries(['view-list','view-search','view-state','view-sort','view-language','view-count','view-no-match'].map(id=>[id,element()]));
+  const nodes = Object.fromEntries(['view-list','view-scroll','view-search','view-state','view-sort','view-language','view-count','view-no-match'].map(id=>[id,element()]));
   nodes['view-list'].children=[a,b]; nodes['view-list'].append = row => { nodes['view-list'].children=nodes['view-list'].children.filter(item=>item!==row); nodes['view-list'].children.push(row); };
   nodes['view-sort'].value='name';
   const timestamp = element(), calendarDay = element();
   timestamp.dataset.date='2026-02-01T18:38:00Z'; calendarDay.dataset.date='2026-02-01';
-  const document = { getElementById:id=>nodes[id], documentElement:{}, querySelectorAll:selector=>selector==='time[data-date]'?[timestamp,calendarDay]:[], querySelector:()=>element() };
+  const document = { getElementById:id=>nodes[id], documentElement:{}, querySelectorAll:selector=>selector==='time[data-date]'?[timestamp,calendarDay]:[], querySelector:()=>element(), addEventListener(){} };
   const viewerIntl = { DateTimeFormat: function(locale,options){return new Intl.DateTimeFormat(locale,{timeZone:'Asia/Taipei',...options});} };
   vm.runInNewContext(script,{document,Intl:viewerIntl});
   assert.equal(nodes['view-language'].disabled,false);
@@ -126,8 +126,10 @@ test('local filter, sort and language controls work without any host or persiste
   assert.match(timestamp.textContent,/GMT\+8/);
   assert.equal(calendarDay.textContent,'Feb 1, 2026');
   assert.deepEqual(nodes['view-list'].children,[b,a]);
+  nodes['view-scroll'].scrollTop=420;
   nodes['view-search'].value='beta'; nodes['view-search'].listeners.input();
-  assert.equal(b.hidden,true); assert.equal(a.hidden,false); assert.equal(nodes['view-count'].textContent,'1 services');
+  assert.equal(nodes['view-scroll'].scrollTop,0);
+  assert.equal(b.hidden,true); assert.equal(a.hidden,false); assert.equal(nodes['view-count'].textContent,'1 service');
   nodes['view-state'].value='active'; nodes['view-state'].listeners.change();
   assert.equal(nodes['view-no-match'].hidden,false);
   nodes['view-search'].value=''; nodes['view-state'].value=''; nodes['view-sort'].value='newest'; nodes['view-sort'].listeners.change();
@@ -149,4 +151,121 @@ test('an empty read view provides an honest next action in both languages', () =
     assert.doesNotMatch(html,/>USD\s*0\.00</);
   }
   assert.throws(()=>view.renderHTML({...snapshot,version:2}),/supported/);
+});
+
+test('duplicate providers get local account labels without revealing account identifiers', () => {
+  const snapshot = build([receipt('account-1',{accountRef:'PRIVATE-ONE'}),receipt('account-2',{accountRef:'PRIVATE-TWO'})]);
+  assert.deepEqual(snapshot.rows.map(row=>[row.accountOrdinal,row.accountCount]),[[1,2],[2,2]]);
+  const html = view.renderHTML(snapshot);
+  assert.match(html,/Account 1 \/ 2/);
+  assert.match(html,/Account 2 \/ 2/);
+  assert.match(html,/帳戶 1 \/ 2/);
+  assert.ok(!html.includes('PRIVATE-'));
+  assert.equal(build([receipt('only-one')]).rows[0].accountOrdinal,null);
+});
+
+test('trial deadlines stay canonical and attention dates do not imply an inferred renewal', () => {
+  const trial = receipt('trial',{kind:'trial_confirmed',payment:undefined,nextCharge:{currency:'USD',minor:2000},nextBilling:'2026-09-10',cancelBy:'2026-09-08',trialEnds:'2026-09-10'});
+  const snapshot = build([trial]), row = snapshot.rows[0];
+  assert.equal(row.cancelBy,'2026-09-08');
+  assert.equal(row.trialEnds,'2026-09-10');
+  assert.equal(row.nextAt,'2026-09-10');
+  assert.equal(row.nextAction,'check_trial');
+  const html = view.renderHTML(snapshot);
+  assert.match(html,/data-next="2026-09-08"/);
+  assert.match(html,/Recorded cancel-by date/);
+  assert.match(html,/信件記載試用結束/);
+  assert.deepEqual(snapshot.totals.paidMinorByCurrency,{});
+  const canceled = build([trial,receipt('off',{kind:'renewal_disabled',payment:undefined,receivedAt:'2026-08-03T01:00:00Z',accessEnds:'2026-09-10'})]);
+  assert.equal(canceled.rows[0].nextAction,'off_next');
+  assert.match(view.renderHTML(canceled),/data-next="2026-09-10"/);
+});
+
+test('source links have minimal typed dates, newest first, without exporting email contents', () => {
+  const snapshot = build([receipt('old',{receivedAt:'2026-07-01T01:00:00Z'}),receipt('new',{receivedAt:'2026-08-01T01:00:00Z',subject:'PRIVATE-SUBJECT'})]);
+  assert.deepEqual(snapshot.rows[0].sources,[{messageId:'new',receivedAt:'2026-08-01T01:00:00Z',type:'payment'},{messageId:'old',receivedAt:'2026-07-01T01:00:00Z',type:'payment'}]);
+  const html = view.renderHTML(snapshot);
+  assert.ok(html.indexOf('/#all/new') < html.indexOf('/#all/old'));
+  assert.match(html,/Payment email/);
+  assert.match(html,/付款信件/);
+  assert.ok(!html.includes('PRIVATE-SUBJECT'));
+  // An older saved snapshot can still open its original messages.
+  snapshot.rows[0].sources=[{messageId:'legacy-id'}];
+  assert.match(view.renderHTML(snapshot),/Original email/);
+});
+
+test('discount warnings use controlled localized categories, never raw warning contents', () => {
+  const adjusted = receipt('adjusted',{payment:{currency:'USD',minor:1036},recurringRate:{currency:'USD',minor:4000},hasAdjustments:true});
+  const guardedCore = {...core,projectEvidence(...args){const result=core.projectEvidence(...args);result.subscriptions[0].warnings.push('PRIVATE-RAW-WARNING');return result;}};
+  const snapshot = build([adjusted],{core:guardedCore});
+  assert.deepEqual(snapshot.rows[0].warningCodes,['adjusted_payment']);
+  assert.equal(snapshot.rows[0].warningCount,2);
+  const html = view.renderHTML(snapshot);
+  assert.match(html,/discount or adjustment/);
+  assert.match(html,/不代表下次續訂價格/);
+  assert.match(html,/USD\s*10\.36/);
+  assert.match(html,/USD\s*40\.00/);
+  assert.ok(!JSON.stringify(snapshot).includes('PRIVATE-RAW-WARNING'));
+  assert.ok(!html.includes('PRIVATE-RAW-WARNING'));
+});
+
+test('bundled branding accepts only bounded data images and preserves initials when unavailable', () => {
+  const snapshot = build([receipt('brand')]);
+  const safeData = 'data:image/svg+xml;base64,'+Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M0 0h24v24H0z"/></svg>').toString('base64');
+  const branded = createSubscriptionViewRuntime({brands:{resolve:()=>({src:safeData,initials:'FM'}),notices:()=>[{attribution:'Fictional brand attribution.'}]}}).renderHTML(snapshot);
+  assert.match(branded,/img-src data:/);
+  assert.ok(branded.includes('src="'+safeData+'"'));
+  assert.match(branded,/<span>FM<\/span>/);
+  assert.match(branded,/Fictional brand attribution/);
+  assert.match(branded,/no affiliation or endorsement/);
+  for (const src of ['https://remote.invalid/logo.svg','data:image/svg+xml;base64,'+'A'.repeat(32769),'javascript:alert(1)']) {
+    const fallback = createSubscriptionViewRuntime({brands:{resolve:()=>({src,initials:'FM'})}}).renderHTML(snapshot);
+    assert.doesNotMatch(fallback,/<img data-brand-logo/);
+    assert.match(fallback,/<span>FM<\/span>/);
+  }
+  const failedCatalog = createSubscriptionViewRuntime({brands:{resolve(){throw Error('unavailable');}}}).renderHTML(snapshot);
+  assert.match(failedCatalog,/<span>FI<\/span>/);
+  assert.doesNotMatch(failedCatalog,/<img data-brand-logo/);
+});
+
+test('service expansion, disclosure dismissal and broken-logo fallback work without a host bridge', () => {
+  const script = [...view.renderHTML(build([receipt('controls')])).matchAll(/<script>([\s\S]*?)<\/script>/g)][0][1];
+  const element = (value='') => ({value,dataset:{},disabled:true,hidden:false,open:false,textContent:'',listeners:{},addEventListener(event,fn){this.listeners[event]=fn;},focus(){this.focused=true;}});
+  const rows = ['alpha','beta'].map(name=>Object.assign(element(),{dataset:{name,state:'active',next:'2026-10-01',source:'2026-09-01'}}));
+  const nodes = Object.fromEntries(['view-list','view-scroll','view-search','view-state','view-sort','view-language','view-count','view-no-match'].map(id=>[id,element()]));
+  nodes['view-list'].children=[...rows]; nodes['view-list'].append=()=>{}; nodes['view-sort'].value='name';
+  const popovers = [element(),element()];
+  for (const popover of popovers) { popover.summary=element();popover.close=element();popover.querySelector=selector=>selector==='summary'?popover.summary:popover.close;popover.contains=target=>target===popover; }
+  const broken=element();broken.complete=true;broken.naturalWidth=0;
+  const laterFailure=element();laterFailure.complete=false;laterFailure.naturalWidth=0;
+  const document={getElementById:id=>nodes[id],documentElement:{},listeners:{},addEventListener(event,fn){this.listeners[event]=fn;},querySelector:()=>element(),querySelectorAll(selector){return selector==='[data-popover]'?popovers:selector==='[data-brand-logo]'?[broken,laterFailure]:[];}};
+  vm.runInNewContext(script,{document,Intl});
+  rows[0].open=true;rows[1].open=true;rows[1].listeners.toggle();
+  assert.equal(rows[0].open,false);assert.equal(rows[1].open,true);
+  popovers[0].open=true;popovers[1].open=true;popovers[1].listeners.toggle();
+  assert.equal(popovers[0].open,false);assert.equal(popovers[1].open,true);
+  document.listeners.keydown({key:'Escape'});
+  assert.equal(popovers[1].open,false);assert.equal(popovers[1].summary.focused,true);
+  popovers[0].open=true;popovers[0].close.listeners.click();
+  assert.equal(popovers[0].open,false);assert.equal(popovers[0].summary.focused,true);
+  popovers[0].open=true;document.listeners.click({target:{}});
+  assert.equal(popovers[0].open,false);
+  assert.equal(broken.hidden,true);assert.equal(laterFailure.hidden,false);
+  laterFailure.listeners.error();assert.equal(laterFailure.hidden,true);
+});
+
+test('long lists and empty states share one keyboard-accessible list region; extra currencies remain explicit', () => {
+  const snapshot = build(Array.from({length:81},(_,index)=>receipt('row-'+index,{serviceKey:'fictional-'+index,service:'Fictional '+index})));
+  snapshot.totals.paidMinorByCurrency={USD:2000,EUR:1000,JPY:3000};
+  const html = view.renderHTML(snapshot);
+  assert.equal([...html.matchAll(/id="view-scroll"/g)].length,1);
+  assert.equal([...html.matchAll(/<details class="subscription"/g)].length,81);
+  assert.match(html,/<div id="view-scroll" role="region" tabindex="0"/);
+  assert.ok(html.indexOf('id="view-no-match"')>html.indexOf('id="view-scroll"'));
+  assert.match(html,/3 currency totals/);
+  assert.match(html,/3 種幣別分開合計/);
+  assert.match(html,/USD\s*20\.00/);
+  assert.match(html,/EUR\s*10\.00/);
+  assert.match(html,/JPY\s*3,000/);
+  // Browser geometry is verified separately; these assertions cover only the DOM contract.
 });
