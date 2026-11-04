@@ -437,6 +437,7 @@ function projectEvidence(events, { asOf = new Date().toISOString(), coverage = n
   };
   const groups = new Map();
   const payments = new Map();
+  const invoices = new Map();
   const oneTime = new Map();
   const otherRecurringPayments = new Map();
   const unclassifiedPurchases = [];
@@ -444,6 +445,10 @@ function projectEvidence(events, { asOf = new Date().toISOString(), coverage = n
   const refunds = new Map();
   for (const event of ordered) {
     if (event.sourceProcessingConflict === true || event.candidateStatus === 'needs_review' || event.importStatus === 'needs_source_recheck' || event.authenticated !== true && event.userVerified !== true && !(trustConnectorReads === true && event.sourceFormat === 'claude_plaintext' && typeof event.sourceReadAt === 'string' && Number.isFinite(Date.parse(event.sourceReadAt)))) { heldEvidence.push(event); continue; }
+    if (event.kind === 'invoice_recorded') {
+      const key = transactionKey(event);
+      invoices.set(key, mergeTransaction(invoices.get(key), event, 'invoiceAmount', 'invoiceDay', 'invoiceDateBasis'));
+    }
     if (event.kind === 'unclassified_purchase') { unclassifiedPurchases.push(event); continue; }
     if (event.kind === 'invoice_recorded' && event.category === 'Unclassified') { unclassifiedPurchases.push(event); continue; }
     if (event.category === 'Unclassified' && ['refund_recorded', 'refund_pending'].includes(event.kind)) {
@@ -649,6 +654,7 @@ function projectEvidence(events, { asOf = new Date().toISOString(), coverage = n
     totals[e.payment.currency]=total;
   }
   return { asOf, coverage, subscriptions: subscriptions.filter(s => s.status !== 'not_subscribed'), excludedServices: subscriptions.filter(s => s.status === 'not_subscribed'), refunds: [...refunds.values()], oneTimePurchases: [...oneTime.values()], otherRecurringPayments:[...otherRecurringPayments.values()], unclassifiedPurchases, heldEvidence, payments: [...payments.values()], recordedPaidMinorByCurrency: totals,
+    invoices: [...invoices.values()],
     unconfirmedCurrencyPayments: [...payments.values()].filter(e => !e.payment?.currency).length };
 }
 

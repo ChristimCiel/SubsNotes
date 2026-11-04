@@ -404,3 +404,40 @@ test('an immediately requested month review uses the selected Spam scope while i
   app.pendingSaves[0].resolve();for(let i=0;i<8;i++)await flush();await scan;
   assert.equal(received.includeSpamTrash,true);assert.equal(app.persisted.prefs.includeSpamTrash,true);
 });
+
+// Synthetic invoice fixtures exercise the previously invisible financial queue.
+const fictionalInvoices=Array.from({length:10},(_,i)=>({id:'fictional-reviewed-invoice-'+i,messageId:'synthetic-invoice-mail-'+i,kind:'invoice_recorded',serviceKey:'chatgpt',service:'ChatGPT',category:'AI tools',issuerDomain:'tax.openai.com',authenticated:true,receivedAt:`2026-${String(i+1).padStart(2,'0')}-12T00:00:00Z`,invoiceDay:`2026-${String(i+1).padStart(2,'0')}-10`,reference:'FICTIONAL-INVOICE-'+i,invoiceAmount:{currency:'EUR',minor:1700+i},payment:null,paymentDay:null,paymentDateBasis:'unknown'}));
+
+test('all document-reviewed invoices are reachable from the total and searchable under OpenAI or ChatGPT',async()=>{
+ const app=await harness({events:fictionalInvoices,prefs:{month:'2026-08',language:'en'}});
+ assert.equal(app.elements.get('invoice-review').hidden,false);assert.match(app.elements.get('invoice-review').textContent,/10 invoices need payment verification/);
+ await app.elements.get('invoice-review').dispatch('click');
+ assert.equal(app.elements.get('filter').value,'invoices');assert.equal(app.elements.get('filter').hidden,false);
+ assert.equal(app.elements.get('count').textContent,'10 records · All dates');
+ for(const query of ['OpenAI','ChatGPT']){app.elements.get('search').value=query;await app.elements.get('search').dispatch('input');assert.equal(app.elements.get('count').textContent,'10 records · All dates');}
+ assert.equal((app.elements.get('list').innerHTML.match(/data-record=/g)||[]).length,10);
+ await app.open(fictionalInvoices[0].id);
+ const detail=app.elements.get('detail-body').innerHTML;
+ assert.match(detail,/This invoice is not included in payments/);assert.match(detail,/Invoice issue date/);assert.match(detail,/EUR/);assert.match(detail,/synthetic-invoice-mail-0/);
+ assert.doesNotMatch(app.elements.get('originals').textContent,/EUR/);
+ assert.equal(app.elements.get('total').textContent,'No dated payments recorded');
+});
+
+test('invoice review survives saved-state reopening in both languages and never appears as paid',async()=>{
+ for(const language of ['en','zh']){
+  const app=await harness({events:fictionalInvoices,prefs:{language,view:'other',month:'2026-08'}});
+  assert.match(app.elements.get('list').innerHTML,/fictional-reviewed-invoice-9/);
+  assert.match(app.elements.get('invoice-review').textContent,language==='zh'?/10 張發票的付款待核對/:/10 invoices need payment verification/);
+  const target={dataset:{view:'payments'},closest(){return this;}};await app.elements.get('tabs').dispatch('click',{target});
+  assert.doesNotMatch(app.elements.get('list').innerHTML,/data-record=/);
+ }
+});
+
+test('a newly discovered invoice notification is queued even before its product and document amounts are known',async()=>{
+ const [event]=createEvidenceRuntime(x=>x).extractEvidence({id:'synthetic-fresh-tax-mail',sender:'noreply@tax.openai.com',subject:'Your eGUI FICTIONAL from OpenAI',text:'An invoice has been prepared for your purchase.',receivedAt:'2026-08-03T00:00:00Z',authenticatedSenderDomain:'tax.openai.com'});
+ const app=await harness({events:[event],prefs:{month:'2026-08',language:'en'}});
+ assert.match(app.elements.get('invoice-review').textContent,/1 invoices need payment verification/);
+ await app.elements.get('invoice-review').dispatch('click');
+ assert.match(app.elements.get('list').innerHTML,/OpenAI/);assert.equal(app.elements.get('count').textContent,'1 records · All dates');
+ await app.open(event.id);assert.match(app.elements.get('detail-body').innerHTML,/This invoice is not included in payments/);
+});

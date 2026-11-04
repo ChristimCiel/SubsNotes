@@ -14,6 +14,7 @@ test('real stdio MCP discovery and tools read only the configured private datase
   events.push(...extractEvidence({id:'fixture-dated-payment',sender:'billing@anthropic.com',authenticatedSenderDomain:'anthropic.com',subject:'Your Claude subscription receipt',receivedAt:'2026-10-15T00:00:00Z',text:'Claude Pro monthly subscription. Paid October 15, 2026. Amount paid USD 20.00'}));
   events.push(...extractEvidence({id:'fixture-undated-annual',sender:'billing@anthropic.com',authenticatedSenderDomain:'anthropic.com',subject:'Your Claude subscription receipt',receivedAt:'2026-10-16T00:00:00Z',text:'Claude Pro annual subscription. Amount paid USD 144.00'}));
   events.push({id:'fixture-undated-refund',messageId:'fixture-undated-refund-mail',serviceKey:'claude',service:'Claude',category:'Software',kind:'refund_recorded',authenticated:true,receivedAt:'2026-10-17T00:00:00Z',refund:{currency:'USD',minor:500},refundDay:null,refundDateBasis:'unknown'});
+  events.push({id:'fictional-chatgpt-invoice',messageId:'fictional-tax-mail',serviceKey:'chatgpt',service:'ChatGPT',category:'AI tools',kind:'invoice_recorded',authenticated:true,receivedAt:'2026-10-17T00:00:00Z',invoiceAmount:{currency:'EUR',minor:1900},invoiceDay:'2026-10-16'});
   const snapshot = projectEvidence(events, { asOf: '2026-11-02T00:00:00Z', coverage: { messageCount: 1, exhaustiveMailboxAudit: false } });
   await writeFile(join(directory, 'snapshot.json'), JSON.stringify(snapshot));
   await writeFile(join(directory, 'evidence.json'), JSON.stringify(events));
@@ -34,6 +35,9 @@ test('real stdio MCP discovery and tools read only the configured private datase
     assert.deepEqual(dashboard.structuredContent.providerRefundMinorByCurrency,{});
     assert.equal(dashboard.structuredContent.paymentBasis,'receipt_payment_date');
     assert.equal(dashboard.structuredContent.bankReconciled,false);
+    assert.equal(dashboard.structuredContent.unverifiedInvoiceCount,1);
+    assert.equal(dashboard.structuredContent.pendingInvoices[0].messageId,'fictional-tax-mail');
+    assert.equal(dashboard.structuredContent.pendingInvoices[0].reviewReason,'payment_unverified');
     const inactive=await client.callTool({name:'list_subscriptions',arguments:{status:'likely_canceled'}});
     assert.equal(inactive.structuredContent.subscriptions.length,1);assert.equal(inactive.structuredContent.subscriptions[0].inactivityInference.confirmed,false);
     const evidence = await client.callTool({ name: 'get_evidence', arguments: { serviceKey: 'claude' } });

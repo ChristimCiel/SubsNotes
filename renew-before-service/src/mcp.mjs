@@ -39,6 +39,7 @@ export function createEvidenceServer({ directory = defaultDataDirectory() } = {}
     return { asOf: s.asOf, coverage: s.coverage, counts: s.subscriptions.reduce((a, r) => ({ ...a, [r.status]: (a[r.status] || 0) + 1 }), {}), subscriptions: s.subscriptions,
       recordedGrossPaidMinorByCurrency: cashflow.paidMinorByCurrency, providerRefundMinorByCurrency:cashflow.providerRefundMinorByCurrency,
       financialExclusions:cashflow.excluded, unallocatedPaymentCount:cashflow.excluded.filter(row=>!row.refund&&row.reason==='payment_date_unknown').length, paymentBasis:cashflow.basis, bankReconciled:false,
+      pendingInvoices:cashflow.pendingInvoices, unverifiedInvoiceCount:cashflow.pendingInvoices.length,
       unconfirmedCurrencyPayments: s.unconfirmedCurrencyPayments, oneTimePurchases: s.oneTimePurchases, refunds: s.refunds,
       limits: 'Not a live provider account or bank feed. Only source-verified payments with explicit payment dates, known amounts and currencies enter gross subscription totals. Annual charges stay whole in the payment month. Excluded records, one-time purchases and provider refunds remain separate. Refund evidence does not establish bank settlement. No keep/cancel recommendation is implied.' };
   }));
