@@ -406,7 +406,7 @@ test('an immediately requested month review uses the selected Spam scope while i
 });
 
 // Synthetic invoice fixtures exercise the previously invisible financial queue.
-const fictionalInvoices=Array.from({length:10},(_,i)=>({id:'fictional-reviewed-invoice-'+i,messageId:'synthetic-invoice-mail-'+i,kind:'invoice_recorded',serviceKey:'chatgpt',service:'ChatGPT',category:'AI tools',issuerDomain:'tax.openai.com',authenticated:true,receivedAt:`2026-${String(i+1).padStart(2,'0')}-12T00:00:00Z`,invoiceDay:`2026-${String(i+1).padStart(2,'0')}-10`,reference:'FICTIONAL-INVOICE-'+i,invoiceAmount:{currency:'EUR',minor:1700+i},payment:null,paymentDay:null,paymentDateBasis:'unknown'}));
+const fictionalInvoices=Array.from({length:10},(_,i)=>({id:'fictional-reviewed-invoice-'+i,messageId:'synthetic-invoice-mail-'+i,kind:'invoice_recorded',serviceKey:'chatgpt',service:'ChatGPT',category:'AI tools',issuerDomain:'tax.openai.com',authenticated:true,receivedAt:`2026-${String(i+1).padStart(2,'0')}-12T00:00:00Z`,invoiceDay:`2026-${String(i+1).padStart(2,'0')}-10`,reference:'FICTIONAL-INVOICE-'+i,invoiceAmount:{currency:'EUR',minor:1700+i},payment:null,paymentDay:null,paymentDateBasis:'unknown',receiptVerification:{checkedAt:'2026-11-01T00:00:00Z',fields:['invoiceAmount'],sources:[]}}));
 
 test('all document-reviewed invoices are reachable from the total and searchable under OpenAI or ChatGPT',async()=>{
  const app=await harness({events:fictionalInvoices,prefs:{month:'2026-08',language:'en'}});
@@ -418,7 +418,7 @@ test('all document-reviewed invoices are reachable from the total and searchable
  assert.equal((app.elements.get('list').innerHTML.match(/data-record=/g)||[]).length,10);
  await app.open(fictionalInvoices[0].id);
  const detail=app.elements.get('detail-body').innerHTML;
- assert.match(detail,/This invoice is not included in payments/);assert.match(detail,/Invoice issue date/);assert.match(detail,/EUR/);assert.match(detail,/synthetic-invoice-mail-0/);
+ assert.match(detail,/This invoice is not included in payments/);assert.match(detail,/Invoice document checked · payment unverified/);assert.doesNotMatch(detail,/Receipt\/document checked/);assert.match(detail,/Invoice issue date/);assert.match(detail,/EUR/);assert.match(detail,/synthetic-invoice-mail-0/);
  assert.doesNotMatch(app.elements.get('originals').textContent,/EUR/);
  assert.equal(app.elements.get('total').textContent,'No dated payments recorded');
 });
