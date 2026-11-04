@@ -4,7 +4,7 @@
 
 A free, MIT-licensed subscription ledger that turns receipt evidence into a clear list of payments, renewal dates and records needing a check. Use your existing AI assistant, or run the local report.
 
-**[Download the Claude skill](https://github.com/ChristimCiel/SubsNotes/releases/download/v0.2.0-alpha.10/subsnotes-subscription-review.zip)** · [Try the fictional demo](https://christimciel.github.io/SubsNotes/) · [All downloads](https://github.com/ChristimCiel/SubsNotes/releases)
+**[Download the Claude skill](https://github.com/ChristimCiel/SubsNotes/releases/download/v0.2.0-alpha.11/subsnotes-subscription-review.zip)** · [Try the fictional demo](https://christimciel.github.io/SubsNotes/) · [All downloads](https://github.com/ChristimCiel/SubsNotes/releases)
 
 The hosted demo uses fictional data. It does not read email, send notifications or cancel subscriptions.
 

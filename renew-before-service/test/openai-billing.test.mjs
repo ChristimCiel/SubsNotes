@@ -26,13 +26,14 @@ test('ten document-reviewed ChatGPT invoices remain visible without manufacturin
 });
 
 test('two actual parser rereads preserve every reviewed invoice and its payment-unknown state',async()=>{
- const originals=Array.from({length:10},(_,i)=>reviewed(i)),events=new Map(originals.map(e=>[e.id,structuredClone(e)]));
+ const originals=Array.from({length:10},(_,i)=>({...reviewed(i),evidence:'Document summary: fictional net invoice total confirmed.'})),events=new Map(originals.map(e=>[e.id,structuredClone(e)]));
  const merge=createSourceEvidenceMerger({preserveReceiptVerification,billingExcerpt:createLedgerContracts().billingExcerpt,hash});
  for(let round=0;round<2;round++)for(let i=0;i<10;i++){
   const message=source(i),parsed=await extractWebEvidence(message);
   merge.merge({events,message,parsed,parserVersion:'5'});
  }
  assert.equal(events.size,10);
+ for(const old of originals)assert.equal(events.get(old.id).evidence,old.evidence);
  for(const old of originals)for(const field of old.receiptVerification.fields)assert.deepEqual(events.get(old.id)[field],old[field]);
  const result=summarize([...events.values()]);assert.equal(result.pendingInvoices.length,10);assert.equal(result.included.length,0);
 });

@@ -1,6 +1,16 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {preserveReceiptVerification} from '../src/receipt-verification.mjs';
+test('a blank link-only reread retains a legacy reviewed invoice summary without widening its proof',()=>{
+  const prior={id:'synthetic-summary',messageId:'synthetic-summary-mail',kind:'invoice_recorded',evidence:'Document confirms the fictional net invoice total.',receiptVerification:{checkedAt:'2026-10-01T00:00:00Z',fields:['kind','invoiceAmount']}};
+  const incoming={id:prior.id,messageId:prior.messageId,kind:'unclassified_purchase',evidence:''};
+  const result=preserveReceiptVerification(prior,incoming);
+  assert.equal(result.evidence,prior.evidence);assert.deepEqual(result.receiptVerification.fields,prior.receiptVerification.fields);
+  assert.equal(preserveReceiptVerification(prior,{...incoming,evidence:'New nonempty source summary.'}).evidence,'New nonempty source summary.');
+  for(const key of ['id','messageId','accountRef','lineItemRef','transactionRef','refundRef'])assert.equal(preserveReceiptVerification(prior,{...incoming,[key]:'synthetic-other'}).evidence,'',key);
+  const unreviewed={...prior,receiptVerification:{...prior.receiptVerification,fields:['invoiceAmount']}};
+  assert.equal(preserveReceiptVerification(unreviewed,incoming).evidence,'');
+});
 test('a later plaintext re-read retains document-verified financial fields without importing arbitrary properties',()=>{
   const prior={id:'same-event',messageId:'same-mail',payment:{minor:1725,currency:'USD'},evidence:'Invoice explicitly says USD.',evil:'no',receiptVerification:{checkedAt:'2026-10-01T00:00:00Z',fields:['payment','evidence','evil'],sources:[{page:1,quote:'USD'}]}};
   const incoming={id:'same-event',messageId:'same-mail',payment:{minor:1725,currency:null},sourceReadAt:'2026-10-02T00:00:00Z'};
