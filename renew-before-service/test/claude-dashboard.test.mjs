@@ -590,3 +590,17 @@ test('a missing local source never hides the saved user confirmation or its undo
  await app.elements.get('confirm-remove').dispatch('click');await settleWrites(app);assert.equal(app.persisted.paymentConfirmations[invoice.id].active,false);assert.ok(app.elements.get('confirm-undo'));assert.equal(app.elements.get('confirm-save').disabled,true);
  await app.elements.get('confirm-undo').dispatch('click');await settleWrites(app);assert.equal(app.persisted.paymentConfirmations[invoice.id].active,true);assert.match(app.elements.get('detail-body').innerHTML,/Confirmed by you/);assert.equal(app.persisted.events.length,0);
 });
+
+test('a confirmation queued after a language save clears the settings-saving header once both writes finish',async()=>{
+ const invoice=fictionalInvoices[0],app=await harness({events:[invoice],prefs:{language:'en',view:'other'},now:confirmationNow});
+ await app.elements.get('language').dispatch('click');await flushUi();assert.equal(app.pendingSaves.length,1);await app.open(invoice.id);await submitPayment(app,{precision:'month',month:'2026-01'});
+ assert.match(app.elements.get('status').textContent,/正在儲存設定/);app.pendingSaves[0].resolve();await flushUi();assert.equal(app.pendingSaves.length,2);assert.match(app.elements.get('status').textContent,/正在儲存設定/);
+ app.pendingSaves[1].resolve();await flushUi();assert.match(app.elements.get('status').textContent,/設定已儲存於私人空間/);assert.doesNotMatch(app.elements.get('status').textContent,/正在儲存/);assert.equal(app.persisted.paymentConfirmations[invoice.id].month,'2026-01');assert.equal(app.persisted.prefs.language,'zh-TW');
+});
+
+test('a failed confirmation after a language save retains its meaningful error instead of replacing it with settings-saved status',async()=>{
+ const invoice=fictionalInvoices[0],app=await harness({events:[invoice],prefs:{language:'zh-TW',view:'other'},now:confirmationNow});
+ await app.elements.get('language').dispatch('click');await flushUi();await app.open(invoice.id);await submitPayment(app,{precision:'month',month:'2026-01'});
+ app.pendingSaves[0].resolve();await flushUi();assert.equal(app.pendingSaves.length,2);app.pendingSaves[1].reject(new Error('Synthetic storage failure'));await flushUi();
+ assert.match(app.elements.get('status').textContent,/change could not be confirmed/);assert.doesNotMatch(app.elements.get('status').textContent,/Saving your settings|Settings saved privately/);assert.equal(app.elements.get('status').dataset.error,'true');assert.equal(app.persisted.paymentConfirmations,undefined);assert.equal(app.persisted.prefs.language,'en');
+});

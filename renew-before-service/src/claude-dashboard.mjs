@@ -168,7 +168,7 @@ export function mountClaudeDashboard({ createEvidenceRuntime, extractWebEvidence
       if(!saved||canonical(saved.paymentConfirmations)!==canonical(next.paymentConfirmations))throw new Error('Storage did not confirm the payment change');
       state=saved;confirmationDrafts.delete(key);confirmationFeedback.set(key,{key:action==='remove'?'confirmationRemoved':action==='undo'?'confirmationUndone':'confirmationSaved'});
     };
-    const pending=preferenceWrites.then(apply).catch(async error=>{if(error?.code==='confirmation_stale'){try{const latest=await store.load({fresh:true});if(latest)state=latest;}catch{}}confirmationFeedback.set(key,{error});showError(error);}).finally(()=>{pendingPreferences--;if(confirmationPending.get(key)===request)confirmationPending.delete(key);render();if(selected===key&&$('detail').open){openDetail(key);$('confirmation-result')?.focus();}});
+    const pending=preferenceWrites.then(apply).catch(async error=>{if(error?.code==='confirmation_stale'){try{const latest=await store.load({fresh:true});if(latest)state=latest;}catch{}}confirmationFeedback.set(key,{error});showError(error);}).finally(()=>{pendingPreferences--;if(confirmationPending.get(key)===request)confirmationPending.delete(key);if(!pendingPreferences&&!busy&&messageKey==='prefsSaving'&&!isError)info('prefsSaved');render();if(selected===key&&$('detail').open){openDetail(key);$('confirmation-result')?.focus();}});
     preferenceWrites=pending.catch(()=>{});return pending;
   }
 
