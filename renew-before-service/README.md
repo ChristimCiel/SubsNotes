@@ -2,6 +2,8 @@
 
 [English guide](../guide/en/how-it-works.md) · [繁體中文使用指南](../guide/zh-TW/how-it-works.md)
 
+This directory also contains the shared billing core and Claude web dashboard/skill. For the main Claude web experience, follow the [main setup instructions](../README.md#start-in-claude). The instructions below cover the optional local report and MCP Reader, which read a separate local dataset and do not automatically access the Claude web ledger.
+
 Requires Node.js 22+. The report is read-only and supports English/Traditional Chinese, evidence filters, recorded payments and estimated display-currency conversion.
 
 From the repository root, run `npm ci --prefix renew-before-service`, `npm run sample`, then `npm start` for fictional data.

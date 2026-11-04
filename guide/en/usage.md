@@ -4,7 +4,7 @@
 
 ## First connection
 
-1. Download `subsnotes-subscription-review.zip` from [Releases](https://github.com/ChristimCiel/SubsNotes/releases), upload it to Claude's skill settings, and enable it.
+1. [Download the alpha.12 skill ZIP](https://github.com/ChristimCiel/SubsNotes/releases/download/v0.2.0-alpha.12/subsnotes-subscription-review.zip), upload it to Claude's skill settings, and enable it. The [alpha.12 release page](https://github.com/ChristimCiel/SubsNotes/releases/tag/v0.2.0-alpha.12) lists its assets and checksums.
 2. Connect the intended Gmail account in Claude. The native Gmail and Artifact/personal-storage capabilities must be available to your account. SubsNotes does not supply them.
 3. Ask: **“Use SubsNotes to find my personal subscriptions. Keep the ledger private and show the saved dashboard in English.”**
 4. Check the read-only permission request and **Only you** sharing. Keep the saved Artifact link.

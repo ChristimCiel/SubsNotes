@@ -4,7 +4,7 @@
 
 ## 第一次連接
 
-1. 到 [Releases](https://github.com/ChristimCiel/SubsNotes/releases) 下載 `subsnotes-subscription-review.zip`，在 Claude 技能設定上傳並啟用。
+1. [直接下載 alpha.12 技能 ZIP](https://github.com/ChristimCiel/SubsNotes/releases/download/v0.2.0-alpha.12/subsnotes-subscription-review.zip)，在 Claude 技能設定上傳並啟用。[alpha.12 版本頁](https://github.com/ChristimCiel/SubsNotes/releases/tag/v0.2.0-alpha.12) 列有下載檔與校驗碼。
 2. 在 Claude 連接要整理的 Gmail 帳號。帳號必須能使用原生 Gmail、Artifact 與個人儲存空間；這些能力不是由 SubsNotes 提供。
 3. 對 Claude 說：**「使用 SubsNotes 整理我的個人訂閱，將帳本保存在私人空間，並以繁體中文開啟已儲存的儀表板。」**
 4. 核對唯讀權限與 **Only you／只有你** 分享設定，保留私人 Artifact 連結。

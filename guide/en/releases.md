@@ -2,16 +2,16 @@
 
 [English](releases.md) · [繁體中文](../zh-TW/releases.md) · [Home](../../README.md)
 
-Open the project's [Releases](https://github.com/ChristimCiel/SubsNotes/releases). Some builds are marked **pre-release**; GitHub's generic “latest” link may point to a different build. Read the selected release and its requirements.
+For the Claude web experience, [download the alpha.12 skill ZIP](https://github.com/ChristimCiel/SubsNotes/releases/download/v0.2.0-alpha.12/subsnotes-subscription-review.zip) or open the [alpha.12 release page](https://github.com/ChristimCiel/SubsNotes/releases/tag/v0.2.0-alpha.12). It is a published **pre-release**. GitHub's generic “latest” currently points to the older v0.1.0 release, which does not include the Claude skill. See [all releases](https://github.com/ChristimCiel/SubsNotes/releases) to choose another version.
 
 ## Choose a file
 
 | File | Use it for |
 | --- | --- |
-| `subsnotes-subscription-review.zip` | Install the skill in a compatible Claude account. This is the usual web starting point. |
-| `subsnotes-claude.html` | Empty-data dashboard source for a compatible private Claude Artifact. Opening it locally does not connect Gmail or storage. |
-| `SubsNotes-Evidence-Reader-<version>.mcpb` | Optional local read-only access to an existing selected evidence folder. It is not needed for Claude web. |
-| `SHA256SUMS.txt` | Compare the integrity hashes of that release's downloadable files. |
+| [`subsnotes-subscription-review.zip`](https://github.com/ChristimCiel/SubsNotes/releases/download/v0.2.0-alpha.12/subsnotes-subscription-review.zip) | Install the skill in a compatible Claude account. This is the usual web starting point. |
+| [`subsnotes-claude.html`](https://github.com/ChristimCiel/SubsNotes/releases/download/v0.2.0-alpha.12/subsnotes-claude.html) | Empty-data dashboard source for a compatible private Claude Artifact. Opening it locally does not connect Gmail or storage. |
+| [`SubsNotes-Evidence-Reader-0.1.5.mcpb`](https://github.com/ChristimCiel/SubsNotes/releases/download/v0.2.0-alpha.12/SubsNotes-Evidence-Reader-0.1.5.mcpb) | Optional local read-only access to an existing selected evidence folder. It is not needed for Claude web. |
+| [`SHA256SUMS`](https://github.com/ChristimCiel/SubsNotes/releases/download/v0.2.0-alpha.12/SHA256SUMS) | Compare the integrity hashes of that release's downloadable files. |
 | GitHub source archives | Source code; not a configured account or a copy of your private data. |
 
 ## Update without losing the ledger
@@ -26,14 +26,16 @@ If the host cannot safely update the same private Artifact, keep the existing le
 
 ## Check download integrity
 
-From the folder containing the release files, use the command for your system:
+If you downloaded all three listed assets and `SHA256SUMS`, verify them from the same folder:
 
 ```sh
-shasum -a 256 -c SHA256SUMS.txt  # macOS
-sha256sum -c SHA256SUMS.txt     # Linux
+shasum -a 256 -c SHA256SUMS  # macOS
+sha256sum -c SHA256SUMS     # Linux
 ```
 
-On Windows, `Get-FileHash -Algorithm SHA256 .\subsnotes-subscription-review.zip` in PowerShell prints a hash to compare with the matching entry in `SHA256SUMS.txt`.
+If you downloaded only the skill ZIP, run `shasum -a 256 subsnotes-subscription-review.zip` on macOS or `sha256sum subsnotes-subscription-review.zip` on Linux and compare the matching entry in `SHA256SUMS`.
+
+On Windows, `Get-FileHash -Algorithm SHA256 .\subsnotes-subscription-review.zip` in PowerShell prints a hash to compare with the matching entry in `SHA256SUMS`.
 
 A matching checksum shows that your copy matches the release's listed bytes. It does not independently verify every feature, authorize a connection or make a local dataset trusted.
 

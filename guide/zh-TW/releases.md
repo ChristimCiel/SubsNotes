@@ -2,16 +2,16 @@
 
 [English](../en/releases.md) · [繁體中文](releases.md) · [首頁](../../README.zh-TW.md)
 
-到專案的 [Releases](https://github.com/ChristimCiel/SubsNotes/releases) 選擇版本。有些版本標示 **pre-release／預覽版**，GitHub 的通用「latest」連結可能指向不同版本，請先看所選版本與需求。
+Claude 網頁版請[直接下載 alpha.12 技能 ZIP](https://github.com/ChristimCiel/SubsNotes/releases/download/v0.2.0-alpha.12/subsnotes-subscription-review.zip)，或開啟 [alpha.12 版本頁](https://github.com/ChristimCiel/SubsNotes/releases/tag/v0.2.0-alpha.12)。它是已公開的 **pre-release／預覽版**。GitHub 的通用「latest」目前指向較舊的 v0.1.0，該版未包含 Claude 技能。需要其他版本時可查看[全部 Releases](https://github.com/ChristimCiel/SubsNotes/releases)。
 
 ## 選擇下載檔
 
 | 檔案 | 用途 |
 | --- | --- |
-| `subsnotes-subscription-review.zip` | 在相容的 Claude 帳號安裝技能；一般網頁使用者從這裡開始。 |
-| `subsnotes-claude.html` | 不含使用者資料的儀表板原始碼，供相容的私人 Claude Artifact 使用；本機開啟不會連接 Gmail 或儲存空間。 |
-| `SubsNotes-Evidence-Reader-<version>.mcpb` | 選用的本機唯讀工具，讀取你選擇的既有帳務資料夾；Claude 網頁版不需要它。 |
-| `SHA256SUMS.txt` | 比對該版本下載檔的完整性雜湊。 |
+| [`subsnotes-subscription-review.zip`](https://github.com/ChristimCiel/SubsNotes/releases/download/v0.2.0-alpha.12/subsnotes-subscription-review.zip) | 在相容的 Claude 帳號安裝技能；一般網頁使用者從這裡開始。 |
+| [`subsnotes-claude.html`](https://github.com/ChristimCiel/SubsNotes/releases/download/v0.2.0-alpha.12/subsnotes-claude.html) | 不含使用者資料的儀表板原始碼，供相容的私人 Claude Artifact 使用；本機開啟不會連接 Gmail 或儲存空間。 |
+| [`SubsNotes-Evidence-Reader-0.1.5.mcpb`](https://github.com/ChristimCiel/SubsNotes/releases/download/v0.2.0-alpha.12/SubsNotes-Evidence-Reader-0.1.5.mcpb) | 選用的本機唯讀工具，讀取你選擇的既有帳務資料夾；Claude 網頁版不需要它。 |
+| [`SHA256SUMS`](https://github.com/ChristimCiel/SubsNotes/releases/download/v0.2.0-alpha.12/SHA256SUMS) | 比對該版本下載檔的完整性雜湊。 |
 | GitHub 原始碼封存檔 | 程式碼，不是已設定好的帳號，也不含你的私人資料。 |
 
 ## 保留帳本的更新方式
@@ -26,14 +26,16 @@
 
 ## 檢查下載完整性
 
-在下載資料夾內選擇適合系統的指令：
+若已下載表中三個套件／原始碼檔及 `SHA256SUMS`，請在同一資料夾執行：
 
 ```sh
-shasum -a 256 -c SHA256SUMS.txt  # macOS
-sha256sum -c SHA256SUMS.txt     # Linux
+shasum -a 256 -c SHA256SUMS  # macOS
+sha256sum -c SHA256SUMS     # Linux
 ```
 
-Windows 可在 PowerShell 執行 `Get-FileHash -Algorithm SHA256 .\subsnotes-subscription-review.zip`，再與 `SHA256SUMS.txt` 的對應項目比對。
+若只下載技能 ZIP，macOS 可執行 `shasum -a 256 subsnotes-subscription-review.zip`，Linux 可執行 `sha256sum subsnotes-subscription-review.zip`，再比對 `SHA256SUMS` 的對應項目。
+
+Windows 可在 PowerShell 執行 `Get-FileHash -Algorithm SHA256 .\subsnotes-subscription-review.zip`，再與 `SHA256SUMS` 的對應項目比對。
 
 校驗相符代表下載副本與該版本列出的位元內容一致，不等於每項功能都已驗證、已取得連接權限，或某份本機資料已具有可信來源。
 

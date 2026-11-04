@@ -1,6 +1,8 @@
-# SubsNotes macOS baseline
+# SubsNotes macOS app — experimental source
 
 This experimental native app retains the internal **Renew Before** app name, bundle identifiers and storage paths to preserve existing installations.
+
+It is a separate optional client. For SubsNotes in Claude on the web, follow the [main setup instructions](../README.md#start-in-claude); this native app is not required. The alpha.12 release does not include a ready-to-install macOS app.
 
 ## Existing features
 

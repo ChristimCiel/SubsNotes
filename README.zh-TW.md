@@ -1,6 +1,7 @@
 <h1 align="center">SubsNotes</h1>
 <p align="center"><strong>看懂訂閱支出，自己決定哪些要保留。</strong><br>一份私人訂閱清單，付款紀錄可查來源，也能自行確認與更正。</p>
-<p align="center"><a href="https://christimciel.github.io/SubsNotes/confirmations.html"><strong>試用合成資料示範</strong></a> · <a href="https://github.com/ChristimCiel/SubsNotes/releases"><strong>下載 Claude 技能</strong></a> · <a href="README.md">English</a></p>
+<p align="center"><a href="https://christimciel.github.io/SubsNotes/confirmations.html"><strong>試用合成資料示範</strong></a> · <a href="https://github.com/ChristimCiel/SubsNotes/releases/download/v0.2.0-alpha.12/subsnotes-subscription-review.zip"><strong>下載 Claude 技能</strong></a> · <a href="README.md">English</a></p>
+<p align="center"><sub>Alpha.12 預覽版・主要使用方式：Claude 網頁版＋Gmail・不需安裝 SubsNotes 桌面 App。<a href="https://github.com/ChristimCiel/SubsNotes/releases/tag/v0.2.0-alpha.12">版本說明與下載校驗碼</a></sub></p>
 
 <p align="center"><img src="assets/screenshots/dashboard-zh-TW.jpg" width="900" alt="SubsNotes 繁體中文儀表板，以合成訂閱資料展示付款紀錄與確認操作"></p>
 <p align="center"><sub>畫面全為合成示範資料，不含個人郵件、真實帳單或憑證。</sub></p>
@@ -16,11 +17,22 @@
 
 公開示範只使用合成資料，不會連接 Gmail、發出提醒或取消訂閱。
 
+## 選擇使用方式
+
+| 方式 | 用途 | 從這裡開始 |
+| --- | --- | --- |
+| **Claude 網頁版・主要體驗** | 從 Gmail 找訂閱，重開已儲存的私人儀表板。 | [下載技能](https://github.com/ChristimCiel/SubsNotes/releases/download/v0.2.0-alpha.12/subsnotes-subscription-review.zip)・[設定指南](guide/zh-TW/usage.md) |
+| 瀏覽器示範 | 不需帳號，以合成紀錄探索介面。 | [開啟示範](https://christimciel.github.io/SubsNotes/confirmations.html) |
+| 本機 MCP Reader・選用 | 讓相容的桌面助理唯讀存取你選定的本機帳務資料夾。 | [Reader 設定](renew-before-service/README.md#ai-reader) |
+| macOS App・實驗性原始碼 | 自行建置獨立的原生客戶端，使用選單列、快捷鍵與本機提醒。 | [原始碼建置與 Gmail 設定](renew-before-mac/README.md) |
+
+MCP Reader 不會連接 Gmail，也不會自動讀取 Claude 網頁帳本。macOS 客戶端需要 macOS／Xcode 及獨立設定；alpha.12 未附可直接安裝的 macOS App。主要的 Claude 網頁體驗不需要這兩個本機元件。
+
 ## 在 Claude 開始使用
 
 **需要的條件：**Claude 帳號必須有可用的 Gmail、程式執行，以及原生 Artifact 連接器與個人儲存空間。個人 Artifact 儲存需[符合資格的付費 Claude 方案](https://support.claude.com/en/articles/17153992-what-are-artifacts-and-how-do-i-use-them)。SubsNotes 本身不另收訂閱費，也不要求模型 API key、託管帳號或獨立桌面 App。
 
-1. **安裝技能。** 到 [Releases](https://github.com/ChristimCiel/SubsNotes/releases) 下載 `subsnotes-subscription-review.zip`，在 Claude 的技能設定上傳並啟用。選單名稱可能因帳號而異。
+1. **安裝技能。** [直接下載 alpha.12 的 `subsnotes-subscription-review.zip`](https://github.com/ChristimCiel/SubsNotes/releases/download/v0.2.0-alpha.12/subsnotes-subscription-review.zip)，在 Claude 的技能設定上傳並啟用。選單名稱可能因帳號而異。若未開始下載，開啟 [alpha.12 版本頁](https://github.com/ChristimCiel/SubsNotes/releases/tag/v0.2.0-alpha.12)，展開 **Assets**。
 2. **在 Claude 連接 Gmail。** 核對帳號與唯讀權限；安裝技能本身不會授予信箱權限。
 3. **對 Claude 說：**
 
@@ -71,6 +83,17 @@ npm start
 ```
 
 開啟 http://127.0.0.1:4183/，以 Ctrl+C 停止。範例不會覆寫既有資料；本機報告是唯讀。［[其他使用方式](guide/zh-TW/how-it-works.md#其他使用方式)］
+
+## 原始碼目錄
+
+**Renew Before** 是專案早期名稱。SubsNotes 為了相容既有使用方式，保留這些原始碼資料夾名稱及原有 App／儲存識別碼。
+
+| 資料夾 | 內容 |
+| --- | --- |
+| [`renew-before-service/`](renew-before-service/) | 共用帳務規則、Claude 儀表板／技能、本機報告與 MCP Reader。 |
+| [`renew-before-demo/`](renew-before-demo/) | 瀏覽器示範原始碼與產出的示範檔案。 |
+| [`renew-before-mac/`](renew-before-mac/) | 選用的實驗性原生 macOS 客戶端。 |
+| [`guide/`](guide/) | 英文與繁體中文使用文件。 |
 
 ## 說明與社群
 
