@@ -4,9 +4,11 @@
 
 A free, MIT-licensed subscription ledger that turns receipt evidence into a clear list of payments, renewal dates and records needing a check. Use your existing AI assistant, or run the local report.
 
-**[Download the Claude skill](https://github.com/ChristimCiel/SubsNotes/releases/download/v0.2.0-alpha.8/subsnotes-subscription-review.zip)** · [Try the fictional demo](https://christimciel.github.io/SubsNotes/) · [All downloads](https://github.com/ChristimCiel/SubsNotes/releases)
+**[Download the Claude skill](https://github.com/ChristimCiel/SubsNotes/releases/download/v0.2.0-alpha.9/subsnotes-subscription-review.zip)** · [Try the fictional demo](https://christimciel.github.io/SubsNotes/) · [All downloads](https://github.com/ChristimCiel/SubsNotes/releases)
 
 The hosted demo uses fictional data. It does not read email, send notifications or cancel subscriptions.
+
+In the saved Claude dashboard, choose a month and switch between **Subscriptions** (service-period evidence, including dates needing a check) and **Payments** (verified charges in the month paid). Annual charges stay whole in their payment month. Under **Your data & update settings**, use **Review selected month** to backfill receipts and notices; Spam and Trash are optional. Current account status, historical service periods and actual payments remain separate. Original emails stay linked, and unavailable document content stays flagged.
 
 **Likely inactive** is an estimate from dated billing evidence: a renewal more than 60 days overdue without later payment, or multiple distinct unresolved expiry/payment warnings. Recorded cancellations, reported expiry and payment issues remain separate. Open details for qualitative evidence strength and original emails. Missing mail can change the conclusion; no status cancels the provider's plan or deletes payment history.
 

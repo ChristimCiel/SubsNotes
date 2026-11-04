@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 import { webcrypto } from 'node:crypto';
 import { mountClaudeDashboard } from '../src/claude-dashboard.mjs';
+import { createSubscriptionActivityRuntime } from '../src/subscription-activity.mjs';
 import { createEvidenceRuntime } from '../src/evidence-runtime.mjs';
 import { createCashflowRuntime } from '../src/cashflow.mjs';
 import { createFxRuntime } from '../src/fx.mjs';
@@ -46,7 +47,7 @@ async function harness({events=null,prefs={},freezePreferences=false,now=null,mc
   const window={claude:{use:async key=>key==='mcp'&&mcpReady?await mcpReady:capabilities[key]},addEventListener(){}};
   const ClockDate = now ? class extends Date { constructor(...args){super(...(args.length?args:[now]));}static now(){return new Date(now).getTime();} } : Date;
   const mount=vm.runInNewContext('('+mountClaudeDashboard.toString()+')',{document,window,crypto:webcrypto,TextEncoder,Date:ClockDate,setInterval(){}});
-  mount({createEvidenceRuntime,createCashflowRuntime,createFxRuntime,createSubscriptionViewRuntime,createServiceBrandsRuntime,createSourceEvidenceMerger,preserveReceiptVerification,createLedgerContracts,extractWebEvidence(){},createClaudePersonalStore:()=>store,createClaudeRatesClient:()=>({load:async()=>{throw new Error('Rates unavailable in this test');}}),createClaudeGmailClient:()=>({}),createWebSync:()=>({run:syncRun||(()=>{throw new Error('No scan is requested by these tests');})})});
+  mount({createSubscriptionActivityRuntime,createEvidenceRuntime,createCashflowRuntime,createFxRuntime,createSubscriptionViewRuntime,createServiceBrandsRuntime,createSourceEvidenceMerger,preserveReceiptVerification,createLedgerContracts,extractWebEvidence(){},createClaudePersonalStore:()=>store,createClaudeRatesClient:()=>({load:async()=>{throw new Error('Rates unavailable in this test');}}),createClaudeGmailClient:()=>({}),createWebSync:()=>({run:syncRun||(()=>{throw new Error('No scan is requested by these tests');})})});
   for(let i=0;i<4;i++)await flush();
   const open=async key=>{const button=new Element('row');button.dataset.record=key;button.closest=()=>button;await elements.get('list').dispatch('click',{target:button});};
   const change=days=>{const select=elements.get('review');select.value=String(days);return select.dispatch('change');};
@@ -243,7 +244,7 @@ test('bundled logos and their attribution remain static data in the empty-accoun
 test('likely-canceled plans hide by default but remain inspectable and bilingual without changing the saved ledger',async()=>{
   const events=[{id:'fictional-old',messageId:'fictional-old-mail',serviceKey:'fictional-old',service:'Fictional Old Plan',category:'Software',kind:'subscription_confirmed',authenticated:true,receivedAt:'2020-01-01T00:00:00Z',nextBilling:'2020-02-01'}];
   const app=await harness({events});
-  assert.match(app.elements.get('count').textContent,/0 records · All dates · 1 likely inactive hidden/);
+  assert.match(app.elements.get('count').textContent,/0 services · All dates · 1 likely inactive hidden/);
   assert.doesNotMatch(app.elements.get('list').innerHTML,/data-record="fictional-old"/);
   const filter=app.elements.get('filter');filter.value='likely_canceled';await filter.dispatch('change');
   assert.match(app.elements.get('list').innerHTML,/Fictional Old Plan/);assert.match(app.elements.get('list').innerHTML,/Likely inactive/);
@@ -268,7 +269,7 @@ test('Refresh reads externally updated records without scanning Gmail or replaci
   const original=app.persisted,added={...original.events[0],id:'gamma',messageId:'mail-gamma',serviceKey:'gamma',service:'Fictional gamma'};
   app.replace({...original,storageRevision:'revision-two',events:[...original.events,added]});
   await app.elements.get('refresh').dispatch('click');for(let i=0;i<8;i++)await flush();
-  assert.equal(scans,0);assert.match(app.elements.get('status').textContent,/Saved records reloaded/);assert.equal(app.elements.get('count').textContent,'3 records · All dates');assert.match(app.elements.get('list').innerHTML,/Fictional gamma/);
+  assert.equal(scans,0);assert.match(app.elements.get('status').textContent,/Saved records reloaded/);assert.equal(app.elements.get('count').textContent,'3 services · All dates');assert.match(app.elements.get('list').innerHTML,/Fictional gamma/);
   assert.deepEqual(app.persisted.events.slice(0,2),original.events);
   assert.equal(app.elements.get('refresh').disabled,false);
 });
@@ -285,7 +286,7 @@ test('month and currency selections stay interactive during sync and persist aft
   assert.equal(month.value,'2026-07');assert.equal(currency.value,'EUR');
 });
 
-test('choosing a payment month opens exactly the verified expense rows used by its total, with full annual charges only in their payment month',async()=>{
+test('the chosen Payments view keeps exact actual-payment rows when changing months, with annual charges only in their payment month',async()=>{
   const events=[
     syntheticReceipt('annual-paid',{serviceKey:'annual',service:'Fictional Annual',cadence:'annual',payment:{currency:'USD',minor:12000},paymentDay:'2026-07-31',receivedAt:'2026-08-01T00:30:00Z'}),
     syntheticReceipt('monthly-paid',{serviceKey:'monthly',service:'Fictional Monthly',paymentDay:'2026-08-20'}),
@@ -293,7 +294,7 @@ test('choosing a payment month opens exactly the verified expense rows used by i
     syntheticReceipt('unknown-date',{serviceKey:'unknown',service:'Fictional Date Unknown',paymentDay:null,paymentDateBasis:'unknown'}),
     syntheticReceipt('held-paid',{serviceKey:'held',service:'Fictional Held',sourceProcessingConflict:true})
   ];
-  const app=await harness({events,prefs:{language:'en'}}),month=app.elements.get('month');
+  const app=await harness({events,prefs:{language:'en',view:'payments'}}),month=app.elements.get('month');
   month.value='2026-08';await month.dispatch('change');
   assert.match(app.elements.get('tabs').innerHTML,/data-view="payments" aria-pressed="true"/);
   assert.equal(app.elements.get('originals').textContent,'USD 12.00');
@@ -308,10 +309,10 @@ test('choosing a payment month opens exactly the verified expense rows used by i
   assert.doesNotMatch(app.elements.get('originals').textContent,/120|12\.00|999/);
 });
 
-test('reopening a selected month restores its expense list while the subscription library and review queue explicitly cover all dates',async()=>{
+test('reopening preserves an explicit Payments view while subscriptions show selected-month evidence and Other retains all dates',async()=>{
   for(const language of ['en','zh']){
     const events=[syntheticReceipt('known'),syntheticReceipt('no-date',{serviceKey:'unknown',service:'Fictional Unknown Date',paymentDay:null,paymentDateBasis:'unknown'})];
-    const app=await harness({events,prefs:{language,month:'2026-08'}});
+    const app=await harness({events,prefs:{language,month:'2026-08',view:'payments'}});
     assert.match(app.elements.get('tabs').innerHTML,/data-view="payments" aria-pressed="true"/);
     assert.doesNotMatch(app.elements.get('list').innerHTML,/Fictional Unknown Date/);
     const choose=async view=>app.elements.get('tabs').dispatch('click',{target:{closest:()=>({dataset:{view}})}});
@@ -320,8 +321,8 @@ test('reopening a selected month restores its expense list while the subscriptio
     assert.match(app.elements.get('list').innerHTML,language==='zh'?/付款仍需核對/:/Payment needs verification/);
     assert.match(app.elements.get('count').textContent,language==='zh'?/所有日期/:/All dates/);
     await choose('subs');
-    assert.equal(app.elements.get('list-label').textContent,language==='zh'?'全部訂閱':'All subscriptions');
-    assert.match(app.elements.get('count').textContent,language==='zh'?/所有日期/:/All dates/);
+    assert.equal(app.elements.get('list-label').textContent,language==='zh'?'當月訂閱依據':'Subscription evidence this month');
+    assert.doesNotMatch(app.elements.get('count').textContent,/All dates|所有日期/);
     await app.open('fictional');
     assert.match(app.elements.get('detail-body').innerHTML,language==='zh'?/已記錄付款・所有月份/:/Recorded payments · all months/);
   }
@@ -335,4 +336,71 @@ test('saved stale review counts are recomputed across parser versions before Gma
   assert.match(app.elements.get('coverage').textContent,/2 messages need another look/);
   assert.match(app.elements.get('list').innerHTML,/Fictional alpha/);
   release({});
+});
+
+
+test('annual access remains in monthly subscriptions without creating another payment, and today’s cancellation does not erase history',async()=>{
+  const events=[
+    syntheticReceipt('year',{serviceKey:'yearly',service:'Fictional Yearly',paymentDay:'2026-07-01',receivedAt:'2026-07-01T00:00:00Z',cadence:'annual',period:{start:'2026-07-01',end:'2027-07-01'}}),
+    syntheticReceipt('off',{serviceKey:'yearly',service:'Fictional Yearly',kind:'renewal_disabled',payment:undefined,paymentDay:undefined,receivedAt:'2026-11-01T00:00:00Z',accessEnds:'2027-07-01'})
+  ];
+  const app=await harness({events,prefs:{month:'2026-10',language:'en'},now:'2026-11-04T00:00:00Z'});
+  assert.match(app.elements.get('tabs').innerHTML,/data-view="subs" aria-pressed="true"/);
+  assert.match(app.elements.get('list').innerHTML,/Fictional Yearly/);assert.match(app.elements.get('list').innerHTML,/Service period recorded/);
+  assert.equal(app.elements.get('originals').textContent,'No dated payments recorded');
+  assert.match(app.elements.get('month').innerHTML,/2026-09/);
+  await app.open('yearly');assert.match(app.elements.get('detail-body').innerHTML,/Evidence for the selected month/);assert.match(app.elements.get('detail-body').innerHTML,/Current recorded status/);
+  app.elements.get('detail').close();
+  await app.elements.get('tabs').dispatch('click',{target:{closest:()=>({dataset:{view:'payments'}})}});
+  assert.doesNotMatch(app.elements.get('list').innerHTML,/Fictional Yearly/);
+  const month=app.elements.get('month');month.value='2026-07';await month.dispatch('change');
+  assert.match(app.elements.get('list').innerHTML,/Fictional Yearly/);
+  assert.match(app.elements.get('tabs').innerHTML,/data-view="payments" aria-pressed="true"/);
+});
+
+test('month changes keep Subscriptions selected and persist the view instead of silently switching to Payments',async()=>{
+  const app=await harness({prefs:{language:'en'}}),month=app.elements.get('month');
+  month.value='2026-08';await month.dispatch('change');await flush();
+  assert.match(app.elements.get('tabs').innerHTML,/data-view="subs" aria-pressed="true"/);
+  assert.equal(app.pendingSaves[0].next.prefs.view,'subs');
+  app.pendingSaves[0].resolve();await flush();await flush();
+  const reopened=await harness({events:app.persisted.events,prefs:app.persisted.prefs});
+  assert.match(reopened.elements.get('tabs').innerHTML,/data-view="subs" aria-pressed="true"/);
+});
+
+test('selected-month review passes real calendar boundaries, preserves the view and shows scope separately from extraction',async()=>{
+  let received;const app=await harness({prefs:{language:'en',month:'2026-09',timeZone:'Asia/Taipei'},syncRun:async options=>{received=options;return {state:app.persisted,complete:true};}});
+  await app.elements.get('review-month').dispatch('click');for(let i=0;i<5;i++)await flush();
+  assert.equal(received.since,1788192000);assert.equal(received.until,1790784000);assert.equal(received.includeSpamTrash,false);
+  assert.match(app.elements.get('month-coverage').textContent,/not been fully reviewed/);
+  assert.match(app.elements.get('tabs').innerHTML,/data-view="subs" aria-pressed="true"/);
+  if(app.pendingSaves.length){app.pendingSaves[0].resolve();await flush();}
+});
+
+test('saved month coverage never implies extraction completeness or a global excluded count for that month',async()=>{
+  const app=await harness({events:[syntheticReceipt('unknown-date',{paymentDay:null,paymentDateBasis:'unknown'})],prefs:{month:'2026-09',language:'en',timeZone:'Asia/Taipei'},initialState:{discoveryCoverage:{format:'ranges-v1',ranges:[['billing-v3',false,1788192000,1790784000,'2026-11-04T00:00:00Z']]}}});
+  assert.match(app.elements.get('month-coverage').textContent,/query was completed; extraction may still need review/);
+  assert.match(app.elements.get('basis').textContent,/across all dates/);
+  assert.match(app.elements.get('list').innerHTML,/Service dates need checking/);
+});
+
+
+test('undated history stays accessible in a separate disclosure and never inflates the documented-period count',async()=>{
+  const events=[syntheticReceipt('annual',{serviceKey:'annual',service:'Fictional Annual',period:{start:'2026-07-01',end:'2027-07-01'}}),syntheticReceipt('undated',{serviceKey:'undated',service:'Fictional Undated',period:null,paymentDay:null})];
+  const app=await harness({events,prefs:{month:'2026-10',language:'en'},now:'2026-11-04T00:00:00Z'});
+  assert.equal(app.elements.get('count').textContent,'1 with periods · 1 to check');
+  assert.match(app.elements.get('list').innerHTML,/<details class="unassigned"><summary>Dates needed · not assigned to this month · 1/);
+  assert.match(app.elements.get('list').innerHTML,/Fictional Undated/);
+  app.elements.get('search').value='Undated';await app.elements.get('search').dispatch('input');
+  assert.match(app.elements.get('list').innerHTML,/<details class="unassigned" open>/);
+});
+
+
+test('an immediately requested month review uses the selected Spam scope while its preference write is still pending',async()=>{
+  let received;const app=await harness({prefs:{language:'en',month:'2026-09',includeSpamTrash:false},syncRun:async options=>{received=options;return {state:app.persisted,complete:true,scanKind:'history_review'};}});
+  const checkbox=app.elements.get('spam');checkbox.checked=true;await checkbox.dispatch('change');await flush();
+  assert.equal(app.persisted.prefs.includeSpamTrash,false);assert.equal(app.pendingSaves.length,1);
+  const scan=app.elements.get('review-month').dispatch('click');await flush();assert.equal(checkbox.checked,true);
+  app.pendingSaves[0].resolve();for(let i=0;i<8;i++)await flush();await scan;
+  assert.equal(received.includeSpamTrash,true);assert.equal(app.persisted.prefs.includeSpamTrash,true);
 });

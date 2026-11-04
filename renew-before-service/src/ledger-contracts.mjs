@@ -154,7 +154,7 @@ export function createLedgerContracts() {
       event.importStatus='needs_source_recheck';
     }
     // Portable data is not a newly persisted host revision or a sync checkpoint.
-    for(const key of ['storageRevision','pending','lastCompletedAt','syncAnchorAt','sourceProcessing','sourceProcessingFormat','processingSummary','queryCoverage'])delete state[key];
+    for(const key of ['storageRevision','pending','lastCompletedAt','syncAnchorAt','sourceProcessing','sourceProcessingFormat','processingSummary','queryCoverage','queryVersion','parserVersion','discoveryCoverage','discoveryCheckpoints','discoveryHistoryVersions','lastReview','lastHistoryReviewAt','sourceProcessingChunks','scannedIdsFormat','scannedIds','eventChunks','storageFormat'])delete state[key];
     state.updatesWhileClosed=false;
     return {state,requiresSourceRecheck:true,integrityVerified:true,sourceAuthenticityVerified:false};
   }

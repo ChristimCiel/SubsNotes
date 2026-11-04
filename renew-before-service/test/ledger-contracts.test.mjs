@@ -92,3 +92,12 @@ test('native checkpoint metadata expands losslessly and rejects inconsistent or 
   assert.throws(()=>contracts.expandCheckpointMetadata({...packed,scannedIds:['other-mail']}),/disagree/);
   assert.throws(()=>contracts.expandCheckpointMetadata({...packed,scannedIdsFormat:'unknown'}),/Unsupported/);
 });
+
+
+test('portable imports retain evidence and preferences without inheriting host discovery coverage or checkpoint references',async()=>{
+  const before={...state(),prefs:{language:'zh',view:'subs',month:'2026-09'},sourceProcessing:{'fixture-mail':['5','extracted',1,1,null,null]},scannedIds:['fixture-mail'],scannedIdsFormat:'processing-keys-v1',queryVersion:'billing-v3',discoveryCoverage:{format:'ranges-v1',ranges:[['billing-v3',false,1,2,'2026-09-01T00:00:00Z']]},discoveryCheckpoints:{default:['billing-v3','2026-09-01T00:00:00Z']},discoveryHistoryVersions:{default:'billing-v3'},lastReview:{since:1,until:2},sourceProcessingChunks:['a'.repeat(64)]};
+  const bundle=await contracts.createPortableExport(before,{hash:digest}),imported=await contracts.importPortableExport(bundle,{hash:digest});
+  for(const key of ['storageRevision','sourceProcessing','sourceProcessingChunks','scannedIdsFormat','scannedIds','discoveryCoverage','discoveryCheckpoints','discoveryHistoryVersions','lastReview','queryVersion'])assert.equal(imported.state[key],undefined,key);
+  assert.deepEqual(imported.state.prefs,before.prefs);assert.equal(imported.state.events[0].importStatus,'needs_source_recheck');
+  assert.doesNotThrow(()=>contracts.validateCanonicalState(imported.state));
+});

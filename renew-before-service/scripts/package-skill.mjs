@@ -12,7 +12,7 @@ const files = [
   ['scripts/subscription-view.mjs','scripts/subscription-view.mjs'],
   ['scripts/assistant-sync.mjs','scripts/assistant-sync.mjs'],
   ['scripts/cache-service-logos.mjs','scripts/cache-service-logos.mjs'],
-  ...['ledger-contracts','evidence-runtime','cashflow','fx','service-brands','connector-catalog','public-logo-cache','file-lock','subscription-view','private-directory','assistant-sync','claude-store','claude-gmail','web-sync','web-evidence','receipt-verification'].map(name=>['src/'+name+'.mjs','src/'+name+'.mjs'])
+  ...['subscription-activity','ledger-contracts','evidence-runtime','cashflow','fx','service-brands','connector-catalog','public-logo-cache','file-lock','subscription-view','private-directory','assistant-sync','claude-store','claude-gmail','web-sync','web-evidence','receipt-verification'].map(name=>['src/'+name+'.mjs','src/'+name+'.mjs'])
 ];
 const stage = await mkdtemp(join(tmpdir(),'subsnotes-skill-'));
 try {

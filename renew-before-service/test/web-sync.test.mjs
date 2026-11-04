@@ -87,8 +87,8 @@ test('a scan resumed on a later day reports its original query boundary',async()
   const run=()=>createWebSync({gmail:x.gmail,store:x.store,extract:extractWebEvidence,hash:digest,clock:()=>now}).run({maxReads:1});
   await run();now='2026-08-16T00:00:00Z';
   const result=await run();assert.equal(result.complete,true);
-  assert.match(result.state.queryCoverage[0].query,/before:2026\/08\/16/);
-  assert.ok(!result.state.queryCoverage[0].query.includes('2026/08/17'));
+  assert.equal(result.state.queryCoverage[0].until,Date.parse(time)/1000+1);
+  assert.equal(result.state.queryCoverage[0].queryVersion,'billing-v3');
 });
 
 test('a backfill completed days later cannot skip mail arriving while earlier windows were already read',async()=>{
@@ -102,8 +102,8 @@ test('a backfill completed days later cannot skip mail arriving while earlier wi
   assert.equal(finished.state.syncAnchorAt,time);
   const searches=[];x.gmail.search=async args=>{searches.push(args.query);return {ids:[],nextPageToken:null};};
   now='2026-08-26T00:00:00Z';await run();
-  assert.match(searches[0],/after:2026\/08\/13/);
-  assert.match(searches[0],/before:2026\/08\/27/);
+  assert.ok(searches[0].includes('after:'+(Date.parse('2026-08-13T00:00:00Z')/1000-1)));
+  assert.ok(searches[0].includes('before:'+(Date.parse(now)/1000+1)));
 });
 
 test('retrieved-but-unrecognized sources stay unresolved, stop retrying, and recover after a parser upgrade', async () => {
@@ -401,4 +401,186 @@ test('saved Gmail-shaped evidence reopens, refreshes and syncs a recovery, price
   assert.equal(canceled.subscriptions[0].status,'renewal_off');assert.equal(canceled.subscriptions[0].access,'available');
   assert.equal(canceled.subscriptions[0].statusAssessment.basis,'recorded');assert.equal(canceled.subscriptions[0].accessEnds,'2026-12-04');
   const replay=await sync().run();assert.equal(replay.addedEvidence,0);assert.equal(saved.events.length,6);
+});
+
+test('versioned discovery revisits historical unknown IDs while keeping reviewed records and preferences', async () => {
+  const x=setup();
+  const older={version:1,events:[],scannedIds:[],prefs:{language:'zh',month:'2026-04'},syncVersion:2,
+    syncAnchorAt:time,lastCompletedAt:time,parserVersion:'old'};
+  await x.store.save(older);
+  const result=await x.sync().run();
+  assert.ok(x.calls[0].query.includes('after:'+(Date.parse('2024-08-15T00:00:00Z')/1000-1)));
+  assert.match(x.calls[0].query, /"subscription is now active"/);
+  assert.match(x.calls[0].query, /"amount paid"/);
+  assert.ok(!x.calls[0].query.includes('in:anywhere'));
+  assert.equal(result.state.pending.kind,'version_backfill');
+  assert.deepEqual(result.state.prefs,older.prefs);
+  assert.equal(result.state.discoveryCheckpoints.default,undefined,'a partial query must not mark historical discovery complete');
+});
+
+test('explicit local-month review uses exact epoch bounds, scopes Spam/Trash and leaves incremental checkpoints unchanged', async () => {
+  const x=setup();x.gmail.search=async args=>{x.calls.push(args);return{ids:[],nextPageToken:null};};
+  const old={version:1,events:[],scannedIds:[],prefs:{},syncVersion:2,lastCompletedAt:time,syncAnchorAt:time,
+    discoveryCheckpoints:{default:['billing-v3',time]}};
+  await x.store.save(old);
+  const since='2026-07-01T00:00:00+08:00',until='2026-08-01T00:00:00+08:00';
+  const result=await x.sync().run({since,until,includeSpamTrash:true});
+  assert.ok(x.calls[0].query.includes('after:'+(Date.parse(since)/1000-1)));
+  assert.ok(x.calls[0].query.includes('before:'+(Date.parse(until)/1000)));
+  assert.match(x.calls[0].query,/in:anywhere -in:sent/);
+  assert.equal(result.complete,true);
+  assert.equal(result.state.lastCompletedAt,time);
+  assert.equal(result.state.syncAnchorAt,time);
+  assert.deepEqual(result.state.discoveryCheckpoints,old.discoveryCheckpoints);
+  assert.equal(result.state.lastReview.since,Date.parse(since)/1000);
+  assert.deepEqual(result.state.discoveryCoverage.ranges,[['billing-v3',true,Date.parse(since)/1000,Date.parse(until)/1000,time]]);
+});
+
+test('finishing a selected month never certifies the full historical query version', async () => {
+  const x=setup();x.gmail.search=async args=>{x.calls.push(args);return{ids:[],nextPageToken:null};};
+  const result=await x.sync().run({since:'2026-07-01',until:'2026-08-01'});
+  assert.equal(result.state.discoveryCheckpoints.default,undefined);
+  assert.equal(result.state.lastCompletedAt,null);
+  await x.sync().run();
+  assert.ok(x.calls[1].query.includes('after:'+(Date.parse('2024-08-15T00:00:00Z')/1000-1)));
+  assert.equal((await x.store.load()).discoveryCheckpoints.default[0],'billing-v3');
+});
+
+test('selected-month review resumes bounded known-source rereads without consuming unrelated legacy backlog', async () => {
+  const x=setup();let reads=[];
+  await x.store.save({version:1,events:[],scannedIds:['paid','cancel','unrelated'],prefs:{},sourceProcessing:{
+    paid:['old','extracted',1,0,null,null],cancel:['old','extracted',1,0,null,null],unrelated:['old','extracted',1,0,null,null]}});
+  x.gmail.search=async()=>({ids:['paid','cancel'],nextPageToken:null});const read=x.gmail.message;x.gmail.message=async id=>{reads.push(id);return read(id);};
+  const first=await x.sync().run({since:'2026-08-01',until:'2026-08-15',maxReads:1});
+  assert.equal(first.complete,false);
+  assert.deepEqual(first.state.pending.ids,['cancel']);
+  const second=await x.sync().run({maxReads:1});
+  assert.equal(second.complete,true);
+  assert.deepEqual(reads,['paid','cancel']);
+  assert.equal(second.state.sourceProcessing.unrelated[0],'old');
+});
+
+test('changing a saved review range cannot discard pending IDs or erase the previous ledger', async () => {
+  const x=setup();x.gmail.search=async()=>({ids:['paid','cancel'],nextPageToken:null});
+  await x.sync().run({since:'2026-07-01',until:'2026-08-01',maxReads:1});const before=await x.store.load();
+  await assert.rejects(x.sync().run({since:'2026-06-01',until:'2026-07-01'}),/saved discovery range/);
+  assert.deepEqual(await x.store.load(),before);
+  await assert.rejects(x.sync().run({since:'2026-07-01',until:'2026-08-01',includeSpamTrash:true}),/saved discovery range/);
+  assert.deepEqual(await x.store.load(),before);
+});
+
+test('legacy date-window progress finishes its original query before versioned rediscovery', async () => {
+  const x=setup();
+  await x.store.save({version:1,events:[],scannedIds:[],prefs:{},pending:{mode:'windows-v2',scopeQuery:'legacy exact query',
+    windows:[{since:'2026-08-01',until:'2026-08-15'}],pageToken:'old-page',ids:[],nextPageToken:null,startedAt:time}});
+  x.gmail.search=async args=>{x.calls.push(args);return{ids:['paid'],nextPageToken:null};};
+  const first=await x.sync().run();
+  assert.equal(first.complete,true);assert.equal(first.state.events.length,1);
+  assert.equal(x.calls[0].pageToken,'old-page');assert.match(x.calls[0].query,/after:2026\/08\/01/);
+  assert.equal(first.state.discoveryCheckpoints.default,undefined);
+  await x.sync().run();assert.match(x.calls[1].query,/"subscription is now active"/);
+  assert.equal((await x.store.load()).discoveryCheckpoints.default[0],'billing-v3');
+});
+
+test('durable interval coverage survives incremental journal rollover without claiming a fresh full-history audit', async () => {
+  const x=setup();x.gmail.search=async()=>({ids:[],nextPageToken:null});let now=time;
+  const run=args=>createWebSync({gmail:x.gmail,store:x.store,extract:extractWebEvidence,hash:digest,clock:()=>now}).run(args);
+  await run({since:'2026-01-01',until:'2026-02-01'});
+  for(let day=1;day<=25;day++) {now=`2026-09-${String(day).padStart(2,'0')}T00:00:00Z`;await run({since:now,until:new Date(Date.parse(now)+3600000).toISOString()});}
+  const state=await x.store.load();
+  assert.ok(state.queryCoverage.length<=20);
+  assert.ok(state.discoveryCoverage.ranges.some(r=>r[2]===Date.parse('2026-01-01')/1000&&r[3]===Date.parse('2026-02-01')/1000));
+  const metadataBytes=Buffer.byteLength(JSON.stringify(state));assert.ok(metadataBytes<12000,'coverage remains bounded and does not repeat a large keyword query');
+});
+
+test('overlapping historical ranges coalesce only under the same query version and privacy scope', async () => {
+  const x=setup();x.gmail.search=async()=>({ids:[],nextPageToken:null});
+  await x.sync().run({since:'2026-06-01',until:'2026-07-01'});
+  await x.sync().run({since:'2026-07-01',until:'2026-08-01'});
+  await x.sync().run({since:'2026-06-01',until:'2026-08-01',includeSpamTrash:true});
+  const ranges=(await x.store.load()).discoveryCoverage.ranges;
+  assert.equal(ranges.length,2);assert.equal(ranges[0][1],false);assert.equal(ranges[1][1],true);
+  assert.equal(ranges[0][2],Date.parse('2026-06-01')/1000);assert.equal(ranges[0][3],Date.parse('2026-08-01')/1000);
+});
+
+test('HTML-only content unavailable remains a source review without losing old financial evidence', async () => {
+  const x=setup();await x.sync().run();const before=await x.store.load();x.gmail.search=async()=>({ids:[],nextPageToken:null});
+  const old=x.gmail.message;x.gmail.message=async id=>({...await old(id),text:'',sourceContentUnavailable:true,bodyFormat:'unavailable'});
+  const result=await createWebSync({gmail:x.gmail,store:x.store,extract:extractWebEvidence,hash:digest,clock:()=>time,parserVersion:'html-next'}).run();
+  assert.equal(result.state.sourceProcessing.paid[5],'source_content_unavailable');
+  assert.deepEqual(result.state.events,before.events);
+});
+
+test('repeated page tokens, future ranges and malformed boundaries fail without changing saved records', async () => {
+  const x=setup();await x.sync().run();const before=await x.store.load();
+  x.gmail.search=async()=>({ids:[],nextPageToken:before.pending.pageToken});
+  await assert.rejects(x.sync().run(),/repeated a page token/);assert.deepEqual(await x.store.load(),before);
+  for(const args of [{since:'2026-09-01',until:'2026-10-01'},{since:'2026-01-01T00:00:00',until:'2026-02-01'},
+    {since:'2026-01-01'},{since:'2026-07-01',until:'2026-06-01'},{since:'2020-01-01',until:'2026-01-01'}]) {
+    await assert.rejects(x.sync().run(args));assert.deepEqual(await x.store.load(),before);
+  }
+});
+
+test('current-month review records coverage only up to the observed time and resumes its frozen bounds', async () => {
+  const x=setup();x.gmail.search=async()=>({ids:['paid','cancel'],nextPageToken:null});
+  const result=await x.sync().run({since:'2026-08-01',until:'2026-09-01',maxReads:1});
+  assert.equal(result.state.pending.until,Date.parse(time)/1000+1);
+  const complete=await x.sync().run({since:'2026-08-01',until:'2026-09-01',maxReads:1});
+  assert.equal(complete.complete,true);
+  assert.equal(complete.state.lastReview.until,Date.parse(time)/1000+1);
+  assert.equal(complete.state.discoveryCoverage.ranges[0][3],Date.parse(time)/1000+1);
+});
+
+test('automatic recent updates use the legacy anchor without certifying upgraded historical discovery', async () => {
+  const x=setup();let reads=0;
+  await x.store.save({version:1,events:[],scannedIds:['unrelated-history'],prefs:{autoRefresh:true},syncVersion:2,
+    syncAnchorAt:time,lastCompletedAt:time,sourceProcessing:{'unrelated-history':['old','needs_review',1,0,null,'unrecognized_format']}});
+  x.gmail.search=async args=>{x.calls.push(args);return{ids:[],nextPageToken:null};};x.gmail.message=async()=>{reads++;throw new Error('must not read unrelated history');};
+  const result=await x.sync().run({recentOnly:true});
+  assert.equal(result.complete,true);assert.equal(result.scanKind,'incremental');assert.equal(result.recentOnly,true);
+  assert.equal(reads,0);assert.ok(x.calls[0].query.includes('after:'+(Date.parse(time)/1000-2*86400-1)));
+  assert.equal(result.state.discoveryHistoryVersions.default,undefined);
+  assert.deepEqual(result.state.discoveryCheckpoints.default,['billing-v3',time]);
+  await x.sync().run();
+  assert.ok(x.calls[1].query.includes('after:'+(Date.parse('2024-08-15T00:00:00Z')/1000-1)),'manual check still rediscovers upgraded history');
+  assert.equal((await x.store.load()).discoveryHistoryVersions.default,'billing-v3');
+});
+
+test('an empty new account can update recent mail first and later run the full bounded historical scan', async () => {
+  const x=setup();x.gmail.search=async args=>{x.calls.push(args);return{ids:[],nextPageToken:null};};
+  const recent=await x.sync().run({recentOnly:true});
+  assert.equal(recent.complete,true);assert.equal(recent.state.discoveryHistoryVersions.default,undefined);
+  assert.ok(x.calls[0].query.includes('after:'+(Date.parse(time)/1000-2*86400-1)));
+  await x.sync().run();assert.equal((await x.store.load()).discoveryHistoryVersions.default,'billing-v3');
+  assert.ok(x.calls[1].query.includes('after:'+(Date.parse('2024-08-15T00:00:00Z')/1000-1)));
+});
+
+test('automatic recent mode never resumes a paused explicit or version-backfill job', async () => {
+  for(const historical of [true,false]) {
+    const x=setup();x.gmail.search=async()=>({ids:['paid','cancel'],nextPageToken:null});
+    await x.sync().run({...(historical?{since:'2026-07-01',until:'2026-08-01'}:{}),maxReads:1});
+    const before=await x.store.load();
+    await assert.rejects(x.sync().run({recentOnly:true}),/historical review requires Continue/);
+    assert.deepEqual(await x.store.load(),before);
+    const done=await x.sync().run();assert.equal(done.complete,true);
+  }
+});
+
+test('automatic recent mode resumes only its bounded page work and keeps unrelated reprocessing pending', async () => {
+  const x=setup();const seen=[];const read=x.gmail.message;
+  await x.store.save({version:1,events:[],scannedIds:['unrelated-history'],prefs:{},sourceProcessing:{'unrelated-history':['old','extracted',1,0,null,null]}});
+  x.gmail.search=async()=>({ids:['paid','cancel'],nextPageToken:null});x.gmail.message=async id=>{seen.push(id);return read(id);};
+  const first=await x.sync().run({recentOnly:true,maxReads:1});assert.equal(first.complete,false);
+  const done=await x.sync().run({recentOnly:true,maxReads:1});
+  assert.equal(done.complete,true);assert.deepEqual(seen,['paid','cancel']);
+  assert.equal(done.state.processingSummary.reprocessPending,1);
+  assert.equal(done.state.discoveryHistoryVersions.default,undefined);
+});
+
+test('an explicit history review cannot be mixed with recent-only mode or invalid normalized calendar dates', async () => {
+  const x=setup();
+  for(const options of [{since:'2026-07-01',until:'2026-08-01',recentOnly:true},
+    {since:'2026-02-30',until:'2026-03-31'},{since:'2026-02-30T00:00:00+08:00',until:'2026-03-31T00:00:00+08:00'}]) {
+    await assert.rejects(x.sync().run(options));assert.equal(await x.store.load(),null);
+  }
 });

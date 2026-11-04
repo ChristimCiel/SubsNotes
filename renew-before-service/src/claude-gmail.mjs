@@ -25,7 +25,8 @@ export function createClaudeGmailClient(mcp, { clock = () => new Date().toISOStr
     if (pageToken) args.pageToken = pageToken;
     const value = payload(await mcp.callTool('Gmail', 'search_threads', args, { cache: false }));
     if (!Array.isArray(value.threads)) throw new Error('Gmail search did not return threads');
-    const messages = value.threads.flatMap(t => Array.isArray(t.messages) ? t.messages : []);
+    if (value.threads.some(t => !Array.isArray(t.messages) || !t.messages.length)) throw new Error('Gmail search omitted message summaries; coverage is incomplete');
+    const messages = value.threads.flatMap(t => t.messages);
     if (messages.some(m => !m.id && !m.messageId)) throw new Error('Gmail search omitted a message ID');
     const nextPageToken=value.nextPageToken || value.next_page_token || null;
     const estimate=Number(value.resultCountEstimate);
@@ -44,22 +45,37 @@ export function createClaudeGmailClient(mcp, { clock = () => new Date().toISOStr
       return senders[0];
     },
     async message(id) {
-      const value = payload(await mcp.callTool('Gmail', 'get_message', { messageId: id, messageFormat: 'PLAIN_TEXT' }, { cache: false }));
-      if (value.id !== id || !address(value.sender) || !Number.isFinite(Date.parse(value.date))) throw new Error('Gmail message identity or required fields are missing');
-      // Do not request an unverified FULL_CONTENT enum or invent attachment
-      // contents. Some connector responses include HTML despite PLAIN_TEXT;
-      // consume it only when it is actually present and plain text is empty.
-      const plain = typeof value.plaintextBody === 'string' ? value.plaintextBody : null;
-      const html = [value.htmlBody, value.html].find(body => typeof body === 'string' && body.trim());
-      if (plain === null && !html) throw new Error('Gmail message body is unavailable');
-      const useHtml = !plain?.trim() && !!html;
-      const body = useHtml ? html : plain;
+      let value = payload(await mcp.callTool('Gmail', 'get_message', { messageId: id, messageFormat: 'PLAIN_TEXT' }, { cache: false }));
+      const valid = item => item.id === id && address(item.sender) && Number.isFinite(Date.parse(item.date));
+      if (!valid(value)) throw new Error('Gmail message identity or required fields are missing');
+      const placeholder = plain => typeof plain === 'string' && /^(?:your browser does not support html|this (?:message|email) (?:is|was sent) (?:in )?html(?:[- ]only| format)?|please (?:view|read) this (?:message|email) in (?:an? )?html[- ](?:capable|enabled) (?:browser|email client))[.!\s]*$/i.test(plain.trim());
+      const content = item => ({plain:typeof item.plaintextBody === 'string' ? item.plaintextBody : null,
+        html:[item.htmlBody,item.html].find(body=>typeof body==='string' && body.trim()) || null});
+      let {plain,html}=content(value);
+      // FULL_CONTENT was verified for this native get_message tool. Request it
+      // only when the initial response has no usable body; never invent HTML,
+      // RAW payloads or attachment reads when a host does not support it.
+      if((!plain?.trim() || placeholder(plain)) && !html) {
+        let expanded=null;
+        try { expanded=payload(await mcp.callTool('Gmail','get_message',{messageId:id,messageFormat:'FULL_CONTENT'},{cache:false})); }
+        catch(error) { if(error?.requiredTool)throw error; }
+        if(expanded) {
+          if(!valid(expanded) || address(expanded.sender)!==address(value.sender) || Date.parse(expanded.date)!==Date.parse(value.date))throw new Error('Expanded Gmail content does not match the original message identity');
+          const next=content(expanded);
+          if(next.html || next.plain?.trim() && !placeholder(next.plain)){value=expanded;plain=next.plain;html=next.html;}
+        }
+      }
+      const useHtml = (!plain?.trim() || placeholder(plain)) && !!html;
+      const body = (useHtml ? html : plain) || '';
+      const text = useHtml ? htmlToText(body.slice(0, 256_000)) : placeholder(plain) ? '' : body.slice(0, 256_000);
+      const sourceContentUnavailable = !text.trim() && (!plain?.trim() || placeholder(plain));
       return { id, sender: typeof value.sender === 'string' ? value.sender : address(value.sender), subject: typeof value.subject === 'string' ? value.subject : '',
-        text: useHtml ? htmlToText(body.slice(0, 256_000)) : body.slice(0, 256_000), bodyFormat: useHtml ? 'html' : 'plain_text',
+        text, bodyFormat: sourceContentUnavailable ? 'unavailable' : useHtml ? 'html' : 'plain_text', sourceContentUnavailable,
         receivedAt: new Date(value.date).toISOString(), sourceReadAt: clock(), sourceFormat: 'claude_plaintext',
         authenticatedSenderDomain: null, truncated: body.length > 256_000,
         attachmentCount: Array.isArray(value.attachments) ? value.attachments.length : 0,
         attachmentContentRead: false };
+
     }
   };
 }

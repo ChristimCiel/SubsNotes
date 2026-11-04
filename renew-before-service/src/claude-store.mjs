@@ -13,12 +13,46 @@ export function createClaudePersonalStore(db, uid, { hash, revision = () => cryp
   let expected = null, saving = false, uncertain = false;
   const version = value => value?.storageRevision || value?.savedAt || null;
   const verifiedChunks = new Map();
+  const verifiedCheckpoints = new Map();
+  const checkpointMap = value => value && typeof value === 'object' && !Array.isArray(value)
+    && Object.entries(value).every(([id,record])=>/^[A-Za-z0-9_-]{1,200}$/.test(id)
+      && !['__proto__','constructor','prototype'].includes(id) && Array.isArray(record) && [6,7].includes(record.length));
+  async function hydrateCheckpoints(value, fresh) {
+    if (!Object.hasOwn(value,'sourceProcessingChunks')) return value;
+    const refs=value.sourceProcessingChunks;
+    if (Object.hasOwn(value,'sourceProcessing') || !Array.isArray(refs) || !refs.length || refs.length > 512
+      || new Set(refs).size !== refs.length || refs.some(id=>! /^[a-f0-9]{64}$/.test(id))) throw new Error('Invalid saved checkpoint reference');
+    const parts=new Array(refs.length);let cursor=0;
+    const read=async()=>{
+      while(cursor<refs.length){
+        const index=cursor++,id=refs[index];let part=!fresh&&verifiedCheckpoints.get(id);
+        if(!part){
+          const chunk=await collection.doc('checkpoints-'+id).get();
+          if(!chunk?.exists||chunk.metadata?.hasPendingWrites||!checkpointMap(chunk.data()?.sourceProcessing)) throw new Error('A saved checkpoint chunk is unavailable');
+          part=chunk.data().sourceProcessing;
+          if(!Object.keys(part).length||await hash(canonical(part))!==id) throw new Error('A saved checkpoint chunk did not match its reference');
+          verifiedCheckpoints.set(id,structuredClone(part));
+        }
+        parts[index]=structuredClone(part);
+      }
+    };
+    await Promise.all(Array.from({length:Math.min(4,refs.length)},read));
+    const processing={};
+    for(const part of parts)for(const [id,record]of Object.entries(part)){
+      if(Object.hasOwn(processing,id))throw new Error('Saved checkpoint chunks contain duplicate message identities');
+      processing[id]=record;
+    }
+    for(const id of verifiedCheckpoints.keys())if(!refs.includes(id))verifiedCheckpoints.delete(id);
+    const {sourceProcessingChunks,...metadata}=value;
+    return {...metadata,sourceProcessing:processing};
+  }
   async function load({fresh = false} = {}) {
     if(saving)throw new Error('A save is already running');
+    try {
     const snap = await manifest.get();
     if(snap?.metadata?.hasPendingWrites)throw new Error('The saved index has not reached storage yet');
     if (!snap?.exists) { expected = null; uncertain = false; return null; }
-    const value = expandCheckpointMetadata(snap.data());
+    const value = expandCheckpointMetadata(await hydrateCheckpoints(snap.data(),fresh));
     if (Array.isArray(value.events)) {expected=version(value);uncertain=false;return value;} // Existing small histories remain readable.
     if (value.storageFormat !== 'chunks-v1' || !Array.isArray(value.eventChunks)) throw new Error('Unsupported saved record format');
     if (value.eventChunks.length > 512 || value.eventChunks.some(id=>! /^[a-f0-9]{64}$/.test(id))) throw new Error('Invalid saved chunk reference');
@@ -45,6 +79,7 @@ export function createClaudePersonalStore(db, uid, { hash, revision = () => cryp
     const {eventChunks, storageFormat, ...state} = value;
     expected = version(value); uncertain = false;
     return {...state, events};
+    } catch(error) { uncertain=true; throw error; }
   }
   async function save(state) {
     if(saving)throw new Error('A save is already running');
@@ -53,6 +88,7 @@ export function createClaudePersonalStore(db, uid, { hash, revision = () => cryp
     try {
     state=JSON.parse(JSON.stringify(state));
     if(!Array.isArray(state.events))throw new Error('An event history is required');
+    if(Object.hasOwn(state,'sourceProcessingChunks'))throw new Error('Load the complete saved checkpoints before saving');
     const chunks = []; let part = [];
     for (const event of state.events || []) {
       if (bytes({events:[event]}) > maxBytes) throw new Error('A source record exceeds the personal storage limit');
@@ -60,10 +96,26 @@ export function createClaudePersonalStore(db, uid, { hash, revision = () => cryp
       part.push(event);
     }
     if (part.length) chunks.push(part);
+    if(chunks.length>512)throw new Error('The event history requires too many saved chunks; existing records have been preserved');
     const ids = await Promise.all(chunks.map(chunk=>hash(canonical(chunk))));
     const {events, ...metadata}=state;
-    const next={...compactCheckpointMetadata(metadata), storageFormat:'chunks-v1',eventChunks:ids,storageRevision:revision()};
+    let next={...compactCheckpointMetadata(metadata), storageFormat:'chunks-v1',eventChunks:ids,storageRevision:revision()};
     if(typeof next.storageRevision!=='string'||!next.storageRevision||next.storageRevision===expected)throw new Error('A fresh storage revision is required');
+    const checkpointChunks=[];
+    if(bytes(next)>maxBytes&&next.sourceProcessing!=null){
+      if(!checkpointMap(next.sourceProcessing))throw new Error('The saved checkpoint format cannot be chunked safely');
+      let checkpoint={};
+      for(const [id,record]of Object.entries(next.sourceProcessing)){
+        if(bytes({sourceProcessing:{[id]:record}})>maxBytes)throw new Error('A checkpoint record exceeds the personal storage limit');
+        if(Object.keys(checkpoint).length&&bytes({sourceProcessing:{...checkpoint,[id]:record}})>maxBytes){checkpointChunks.push(checkpoint);checkpoint={};}
+        checkpoint[id]=record;
+      }
+      if(Object.keys(checkpoint).length)checkpointChunks.push(checkpoint);
+      if(checkpointChunks.length>512)throw new Error('The checkpoint history requires too many saved chunks; existing records have been preserved');
+      const refs=await Promise.all(checkpointChunks.map(part=>hash(canonical(part))));
+      const {sourceProcessing,...rest}=next;
+      next={...rest,sourceProcessingChunks:refs};
+    }
     if(bytes(next)>maxBytes)throw new Error('The saved index is too large; existing records have been preserved');
     // Immutable content chunks never invalidate the last readable manifest.
     for(const [i,chunk] of chunks.entries()) {
@@ -71,6 +123,12 @@ export function createClaudePersonalStore(db, uid, { hash, revision = () => cryp
       await ref.set({events:chunk});
       const confirmed=await ref.get();
       if(!confirmed?.exists||confirmed.metadata?.hasPendingWrites||await hash(canonical(confirmed.data()?.events))!==ids[i])throw new Error('Storage did not confirm the new source records; the old index was kept');
+    }
+    for(const [i,checkpoint]of checkpointChunks.entries()){
+      const id=next.sourceProcessingChunks[i],ref=collection.doc('checkpoints-'+id);
+      await ref.set({sourceProcessing:checkpoint});
+      const confirmed=await ref.get();
+      if(!confirmed?.exists||confirmed.metadata?.hasPendingWrites||await hash(canonical(confirmed.data()?.sourceProcessing))!==id)throw new Error('Storage did not confirm the new checkpoints; the old index was kept');
     }
     const current=await manifest.get();
     if(current?.metadata?.hasPendingWrites)throw new Error('The saved index has not reached storage yet');

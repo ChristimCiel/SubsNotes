@@ -1,6 +1,6 @@
 {
   "name": "renew-before-service",
-  "version": "0.2.0-alpha.8",
+  "version": "0.2.0-alpha.9",
   "private": true,
   "type": "module",
   "description": "Local subscription evidence, Gmail reconciliation and read-only assistant tools without hosted infrastructure.",

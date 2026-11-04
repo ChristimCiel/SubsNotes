@@ -1,7 +1,7 @@
 {
   "name": "renew-before",
-  "display_name": "SubsNotes · Evidence Reader (Preview)",
-  "version": "0.1.1",
+  "display_name": "SubsNotes \u00b7 Evidence Reader (Preview)",
+  "version": "0.1.2",
   "description": "Read your local subscription, cancellation and payment evidence in Claude. No hosted database or paid API.",
   "long_description": "Engineering preview: reads a previously generated private Gmail evidence report. Gmail scanning and automatic updates require separate setup and are not enabled by installing this reader.",
   "author": {

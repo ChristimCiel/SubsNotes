@@ -35,3 +35,29 @@ test('a reviewed unknown payment date remains unknown rather than inheriting an 
   const result=preserveReceiptVerification(prior,incoming);
   assert.equal(result.paymentDay,null);assert.equal(result.paymentDateBasis,'unknown');
 });
+
+test('source-reviewed renewal and explicit cancellation facts survive a later parser reread',()=>{
+  const prior={id:'synthetic-reviewed-cancel',messageId:'synthetic-reviewed-cancel-mail',kind:'renewal_disabled',
+    renewal:'off',explicitOff:true,receiptVerification:{checkedAt:'2027-06-10T09:00:00Z',fields:['kind','renewal','explicitOff'],sources:[{sha256:'a'.repeat(64),quote:'Auto renewal is off.'}]}};
+  const incoming={id:prior.id,messageId:prior.messageId,kind:'renewal_notice',renewal:'on',explicitOff:false,sourceReadAt:'2027-06-20T09:00:00Z'};
+  const result=preserveReceiptVerification(prior,incoming);
+  assert.equal(result.kind,'renewal_disabled');assert.equal(result.renewal,'off');assert.equal(result.explicitOff,true);
+  assert.equal(result.sourceReadAt,incoming.sourceReadAt);assert.deepEqual(result.receiptVerification,prior.receiptVerification);
+  assert.notEqual(result.receiptVerification,prior.receiptVerification);assert.equal(incoming.renewal,'on');
+  const omitted=preserveReceiptVerification(prior,{id:prior.id,messageId:prior.messageId,kind:'renewal_disabled'});
+  assert.equal(omitted.renewal,'off');assert.equal(omitted.explicitOff,true);
+});
+
+test('renewal review cannot override a genuinely new message, event or explicitly scoped transaction',()=>{
+  const prior={id:'synthetic-reviewed-scope',messageId:'synthetic-reviewed-scope-mail',accountRef:'synthetic-account-a',
+    lineItemRef:'synthetic-line-a',transactionRef:'synthetic-transaction-a',refundRef:'synthetic-refund-a',
+    renewal:'off',explicitOff:true,receiptVerification:{checkedAt:'2027-06-10T09:00:00Z',fields:['renewal','explicitOff']}};
+  const incoming={...prior,renewal:'on',explicitOff:false};delete incoming.receiptVerification;
+  for(const field of ['id','messageId','accountRef','lineItemRef','transactionRef','refundRef']){
+    const result=preserveReceiptVerification(prior,{...incoming,[field]:'synthetic-distinct-source'});
+    assert.equal(result.renewal,'on',field);assert.equal(result.explicitOff,false,field);assert.equal(result.receiptVerification,undefined,field);
+  }
+  const unreviewed={...prior,receiptVerification:{...prior.receiptVerification,fields:['evidence']}};
+  assert.equal(preserveReceiptVerification(unreviewed,incoming).renewal,'on');
+  assert.equal(preserveReceiptVerification(unreviewed,incoming).explicitOff,false);
+});

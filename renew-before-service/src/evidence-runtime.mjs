@@ -85,6 +85,7 @@ function issuer(message) {
   const domain = sender.match(/@([a-z0-9.-]+)/)?.[1] ?? '';
   const from = root => domain === root || domain.endsWith('.' + root);
   if (from('tax.openai.com')) return { key: 'openai-unknown-product', name: 'OpenAI · invoice needs review', category: 'Unclassified', domain };
+  if (from('ezpay.com.tw') && /invoice|電子發票|發票.*開立/i.test(subject+' '+text)) return {key:'ezpay:unknown-merchant',name:'Merchant invoice · ezPay',category:'Unclassified',domain};
   if(from('adobe.com')){
     const body=subject+' '+text,stock=/Adobe Stock/i.test(body),creative=/Creative Cloud Pro|ADOBE CREATIVE CLOUD/i.test(body);
     if(stock&&creative)return {key:'adobe-multiple-products',name:'Adobe · multiple products need review',category:'Unclassified',domain};
@@ -102,6 +103,9 @@ function issuer(message) {
     ['gumlet.com', 'gumlet', 'Gumlet'], ['linear.app', 'linear', 'Linear'], ['assembla.com', 'assembla', 'Assembla'],
     ['cursor.com', 'cursor', 'Cursor'], ['surfshark.com', 'surfshark', 'Surfshark'],
     ['microsoft.com', 'microsoft-365', 'Microsoft 365'],
+    ['kimi.ai', 'kimi', 'Kimi'], ['deepstash.com', 'deepstash', 'Deepstash'],
+    ['wispr.ai', 'wispr-flow', 'Wispr Flow'], ['magicpatterns.com', 'magic-patterns', 'Magic Patterns'],
+    ['magicpatterns.io', 'magic-patterns', 'Magic Patterns'],
     ['mintmobile.com', 'mint-mobile', 'Mint Mobile'], ['perplexity.ai', 'perplexity', 'Perplexity']
   ];
   if (from('cloudflare.com')) {
@@ -117,7 +121,7 @@ function issuer(message) {
     // Merchant notifications about a customer's payment are not the mailbox
     // owner's outgoing subscriptions.
     if (/\byour customer(?:s|['’]s)?\b/i.test(billingText)) return null;
-    if (/\bwe attempted to charge your\b/i.test(text) && /\bfor your Magic\s*Patterns subscription\b/i.test(text)) {
+    if (/\bwe (?:attempted to|were unable to) charge your\b/i.test(text) && /\bfor your Magic\s*Patterns subscription\b/i.test(text)) {
       return {key:'magic-patterns',name:'Magic Patterns',category:'Software',domain};
     }
     for (const [pattern, key, name] of [
@@ -135,6 +139,7 @@ function issuer(message) {
   if (from('cw.com.tw')) return { key: 'commonwealth', name: 'CommonWealth', category: 'Reading', domain };
   if (from('cleverbridge.com') && /refund/i.test(subject)) return { key: 'cleverbridge-unknown-product', name: 'Cleverbridge · product needs review', category: 'Unclassified', domain };
   if (from('google.com') && /Google AI Pro|Google One/.test(subject + text)) return { key: 'google-ai-pro', name: 'Google AI Pro', category: 'AI tools', domain };
+  if (from('google.com') && /\bYouTube\b/i.test(subject + text) && /invoice|統一發票|電子應付憑據/i.test(subject + text)) return { key: 'youtube-premium', name: 'YouTube Premium', category: 'Software', domain };
   if (from('google.com') && /Google Play/.test(subject + text)) return { key: 'google-play', name: 'Google Play purchase', category: 'Unclassified', domain };
   if (/newsletter|哩程|核對表|訂位|報名人|system update/i.test(subject)) return null;
   const merchant = subject.match(/^(?:Your receipt from|Your subscription to)\s+([^#]{2,80})/i)?.[1]?.trim();
@@ -165,6 +170,16 @@ function servicePeriod(text) {
 const MONEY_PATTERN = '(?:' + CURRENCY_MARKERS + ')\\s*[\\d,.]+(?![\\d,.])';
 const afterMoney = (text, label, hint) => money(text.match(new RegExp('(?:' + label + ')\\s*[:：]?\\s*(' + MONEY_PATTERN + ')', 'i'))?.[1]?.replace(/\.$/,''), hint);
 
+function currencyHint(text) {
+  const codes = ISO_CURRENCIES.join('|');
+  const labelled = new Set([...text.matchAll(new RegExp('\\bcurrency(?: code)?\\s*[:：]\\s*(' + codes + ')\\b','gi'))].map(match=>match[1].toUpperCase()));
+  const mentioned = new Set([...text.matchAll(new RegExp('\\b(' + codes + ')\\b','g'))].map(match=>match[1]));
+  return labelled.size === 1 ? [...labelled][0] : labelled.size ? null : mentioned.size === 1 ? [...mentioned][0] : null;
+}
+
+const planLabel = value => typeof value === 'string' && /^[A-Za-z][A-Za-z0-9 -]{0,79}$/.test(value.trim())
+  && !/password|credential|address|account|card|secret|token|login|\d{5}/i.test(value) ? value.trim() : null;
+
 function extractEvidence(input) {
   const message = normalizedMessage(input);
   if (!message.id || !message.receivedAt || !message.sender) throw new Error('Message identity and source are required');
@@ -185,8 +200,18 @@ function extractEvidence(input) {
     evidence: '', kind: 'unknown', currencyAmbiguous: false
   };
   const event = (kind, evidence, extra = {}) => ({ ...base, id: digest(message.id + '|' + kind + '|v1'), kind, evidence: billingExcerpt(evidence), ...extra });
+  const hint = currencyHint(text);
   if(service.key==='cloudflare:unknown-domain')return /invoice|eGUI|發票/i.test(subject)?[event('unclassified_purchase','Cloudflare invoice notification without an identified domain or amount. Review the invoice before linking it to a subscription.',{sourceRequiresDocumentReview:true,providerKey:'cloudflare'})]:[];
   if (service.key === 'openai-unknown-product') return [event('unclassified_purchase', 'OpenAI prepared a tax invoice. The email body does not identify the product, amount or payment status. Review the invoice document before linking it to ChatGPT or API usage.', { sourceRequiresDocumentReview: true, providerKey: 'openai' })];
+  if (service.key === 'ezpay:unknown-merchant') {
+    const invoiceAmount=afterMoney(text,'發票金額|invoice amount',hint);
+    const invoiceDay=parseDay(text.match(/(?:開立日期|invoice date)\s*[:：]?\s*([^\n]{6,40})/i)?.[1]);
+    const reference=text.match(/發\s*票\s*號\s*碼\s*[:：]?\s*([A-Z]{2}\d{8})\b/i)?.[1] || null;
+    return [event('invoice_recorded', 'Invoice amount and invoice date are document facts only. The merchant product, recurring status and actual payment require review.', {
+      invoiceAmount,invoiceDay,reference,sourceFact:'unknown_merchant_invoice',sourceRequiresDocumentReview:true,
+      providerKey:'ezpay',currencyAmbiguous:!!invoiceAmount&&!invoiceAmount.currency
+    })];
+  }
   if (service.key === 'lalamove') {
     if (/儲值收據|top.?up/i.test(subject)) return [event('wallet_top_up', subject, { payment: money(text.match(/總付款金額\s*(NT\$[\d,.]+)/)?.[1]) })];
     if (/送貨收據|配送收據/.test(subject + text)) return [event('one_time_purchase', 'Delivery receipt, not recurring billing', { payment: money(text.match(/總價\s*\(TWD\)\s*(NT\$[\d,.]+)/)?.[1]) })];
@@ -219,6 +244,72 @@ function extractEvidence(input) {
     return [...refunds, event('renewal_disabled', (text.match(cancellation)?.[0] || subject) + (endPhrase ? ` · ${endPhrase}` : ''), { accessEnds, explicitOff })];
   }
   if (refunds.length) return refunds;
+  if (service.key === 'youtube-premium' && /invoice|統一發票|電子應付憑據/i.test(subject) && !/Amount paid|Total paid|本次付款已完成/i.test(text)) {
+    const invoiceAmount = afterMoney(text, 'invoice amount|發票金額', hint);
+    const invoiceDay = parseDay(text.match(/(?:invoice date|開立日期|開立時間)\s*[:：]?\s*([^\n]{6,40})/i)?.[1]);
+    return [event('invoice_recorded', 'YouTube invoice notification. An invoice does not establish payment or a live entitlement; review the original document for missing billing facts.', {
+      service:'YouTube', invoiceAmount, invoiceDay, sourceRequiresDocumentReview:true, productUnconfirmed:true,
+      sourceFact:'invoice_notification', providerKey:'google', paymentDateBasis:'unknown'
+    })];
+  }
+  if (service.key === 'magic-patterns' && /your free year[^.!\n]{0,140}will end on/i.test(text) && /your plan is set to renew as a paid subscription for/i.test(text)) {
+    const nextCharge=afterMoney(text,'your plan is set to renew as a paid subscription for',hint);
+    const endPhrase=text.match(/your free year[^.!\n]{0,140}will end on\s+([^.!\n]{3,45})/i)?.[1];
+    const relative=/\b(?:\d+|one|two)\s+(?:weeks?|days?)\s+(?:to try|remaining|left)/i.test(text);
+    const nextBilling=relative?null:parseDay(endPhrase);
+    return [event('renewal_notice', 'A free promotional year is scheduled to change to a paid subscription. A renewal intention is not proof of payment or completed activation; check the transition date and currency.', {
+      sourceFact:'free_to_paid_renewal', renewal:'unknown', accessType:'promotional', nextCharge,
+      cadence:/\/month\b|per month|monthly/i.test(text)?'monthly':null, nextBilling,
+      dateRequiresReview:!nextBilling, currencyAmbiguous:!!nextCharge&&!nextCharge.currency
+    })];
+  }
+  if (service.key === 'kimi' && /your Kimi membership has expired/i.test(text) && /membership benefits remain paused|benefits (?:are|remain) paused/i.test(text)) {
+    return [event('access_expired', 'Kimi reports that membership has expired and benefits are paused. The exact expiry date and any successful payment are not stated.', {
+      accessEnds:parseDay(text.match(/membership (?:has )?expired on\s+([^.!\n]{6,40})/i)?.[1]), sourceFact:'membership_expired'
+    })];
+  }
+  if (service.key === 'figma' && /Figma for Education verification will expire soon/i.test(text) && /teams you own will become view-only/i.test(text)) {
+    const relative = (subject+' '+text).match(/(?:expires? in|have)\s+(\d+)\s+(days?|weeks?)/i);
+    return [event('access_expiring', 'Figma Education verification expires soon; education teams become view-only unless reverified or upgraded. A relative reminder does not establish an exact expiry date or paid charge.', {
+      plan:'Figma Education', accessEnds:null, sourceFact:'education_expiry', accessType:'education',
+      ...(relative ? {relativeDaysRemaining:Number(relative[1]) * (/weeks?/i.test(relative[2]) ? 7 : 1)} : {})
+    })];
+  }
+  if (service.key === 'wispr-flow' && /earned a free month of Pro|free Flow Pro time unlocked/i.test(text) && /credit will automatically apply to your next invoice/i.test(text)) {
+    return [event('renewal_notice', 'Wispr awarded a free-month credit to apply to a future invoice. This is not a payment or an immediate service-period confirmation.', {
+      plan:'Wispr Flow Pro', renewal:'unknown', sourceFact:'future_credit', creditTiming:'next_invoice'
+    })];
+  }
+  if (service.key === 'gumlet' && /your Gumlet subscription was successfully updated/i.test(text)) {
+    const product = text.match(/\bProduct:\s*([^\n]{1,80})/i)?.[1]?.trim();
+    const plan = planLabel(product);
+    const cycle = text.match(/\bBilling Cycle:\s*(Yearly|Monthly)\b/i)?.[1]?.toLowerCase();
+    return [event('renewal_notice', 'Gumlet confirms a subscription plan update. The update does not establish a payment or a new service period.', {
+      plan, cadence:cycle === 'yearly' ? 'annual' : cycle === 'monthly' ? 'monthly' : null,
+      renewal:'unknown', sourceFact:'plan_updated'
+    })];
+  }
+  if (service.key === 'claude' && /starting today,?\s+your\s+([^\n,.]{1,70})\s+plan is called\s+([^\n,.]{1,60})/i.test(text)) {
+    const rename = text.match(/starting today,?\s+your\s+([^\n,.]{1,70})\s+plan is called\s+([^\n,.]{1,60})/i);
+    return [event('renewal_notice', 'Claude states that the account plan has been renamed. A plan statement is not a successful payment or proof that renewal was re-enabled.', {
+      previousPlan:planLabel(rename[1]), plan:planLabel(rename[2]), renewal:'unknown', sourceFact:'plan_renamed'
+    })];
+  }
+  if (service.key === 'deepstash' && /your subscription is now\s+active/i.test(text) && /Welcome to Deepstash Pro/i.test(subject+' '+text)) {
+    return [event('subscription_confirmed', 'Deepstash confirms that Pro membership is active at the time of this notice. Paid status, billing cycle, renewal and access-end dates are not established.', {
+      plan:'Deepstash Pro', renewal:'unknown', sourceFact:'subscription_active'
+    })];
+  }
+  if (service.key === 'personalityhub' && /your subscription begins immediately and automatically renews after\s+\d+\s+days/i.test(text) && /recurring service priced at/i.test(text)) {
+    const days=Number(text.match(/automatically renews after\s+(\d+)\s+days/i)?.[1]);
+    const recurringRate=afterMoney(text,'recurring service priced at',hint);
+    const introductoryAmount=afterMoney(text,'Total',hint);
+    return [event('subscription_confirmed', 'PersonalityHub confirms introductory membership terms followed by a recurring charge. Offer amounts do not establish an actual payment date; a bare dollar sign does not establish currency.', {
+      renewal:'on', sourceFact:'intro_membership_terms', introductoryAmount,
+      relativeRenewalDays:days, recurringRate, cadence:/billed every month/i.test(text)?'monthly':null,
+      nextBilling:null, currencyAmbiguous:!!recurringRate && !recurringRate.currency
+    })];
+  }
   if (service.key === 'chatgpt' && /你已成功訂閱|subscription will automatically renew monthly/.test(text.replace(/\n/g, ' '))) {
     const nextBilling = parseDay(text.replace(/\n/g, ' ').match(/starting\s+([^.!]{6,40})/i)?.[1]);
     const recurringRate = afterMoney(text, '總計');
@@ -239,7 +330,7 @@ function extractEvidence(input) {
   if ((expirySubject || !/receipt|invoice|收據|發票/i.test(subject)) && /subscription expires (?:soon|on)/i.test(subject + text) && !/\b(?:in\s+\d+\s+days?|tomorrow)\b/i.test(subject + text)) return [event('access_expiring', subject, { accessEnds: parseDay(text.match(/subscription expires on\s*([^.!\n]{6,45})/i)?.[1]) })];
   if (/automatically downgraded to the free tier/i.test(text)) return [event('access_paused', 'Provider support reports a downgrade to the free tier after a missing payment method. Current promotional access needs verification.')];
   if (service.key.startsWith('cloudflare:') && /auto renewal.*enabled/i.test(text)) return [event('renewal_notice', text.match(/Auto renewal[^\n]+/i)?.[0] || subject, { renewal: 'on' })];
-  if (/payment.*(?:failed|declined)|access has been paused|無法順利處理.*付款|付款失敗|逾期未支付/i.test(subject + '\n' + text.slice(0, 1600))) return [event('payment_failed', billingExcerpt(text) || subject)];
+  if (/payment.*(?:failed|declined|unsuccessful)|access has been paused|無法順利處理.*付款|付款失敗|逾期未支付/i.test(subject + '\n' + text.slice(0, 1600))) return [event('payment_failed', billingExcerpt(text) || subject)];
   const expiryText = subject + '\n' + text;
   const tomorrow = /subscription (?:will expire|ends?|expires?) tomorrow/i.test(expiryText);
   if ((expirySubject || !/receipt|invoice|收據|發票/i.test(subject)) && /subscription (?:will expire|ends?|expires?|is about to expire)/i.test(expiryText)) {
@@ -252,13 +343,6 @@ function extractEvidence(input) {
     const renewal = /auto-renew off/i.test(text) ? 'off' : /auto-renew on/i.test(text) ? 'on' : 'unknown';
     return [event('renewal_notice', text.match(/-\s+[^\n]+/)?.[0] || subject, { accessEnds: end, renewal, nextCharge: null })];
   }
-  const currencyCodePattern = ISO_CURRENCIES.join('|');
-  const labelledCurrencies = new Set([...text.matchAll(new RegExp('\\bcurrency(?: code)?\\s*[:：]\\s*(' + currencyCodePattern + ')\\b','gi'))].map(match=>match[1].toUpperCase()));
-  const mentionedCurrencies = new Set([...text.matchAll(new RegExp('\\b(' + currencyCodePattern + ')\\b','g'))].map(match=>match[1]));
-  // A comparison price or another currency in the footer cannot silently
-  // establish the currency of a bare dollar amount.
-  const hint = labelledCurrencies.size === 1 ? [...labelledCurrencies][0]
-    : labelledCurrencies.size ? null : mentionedCurrencies.size === 1 ? [...mentionedCurrencies][0] : null;
   const completedChinesePayment = /本次付款已完成/.test(text);
   let paid = afterMoney(text, 'Amount paid\\*?|Total paid|實付金額', hint)
     ?? (completedChinesePayment ? afterMoney(text,'付款金額',hint) : null)
@@ -361,6 +445,7 @@ function projectEvidence(events, { asOf = new Date().toISOString(), coverage = n
   for (const event of ordered) {
     if (event.sourceProcessingConflict === true || event.candidateStatus === 'needs_review' || event.importStatus === 'needs_source_recheck' || event.authenticated !== true && event.userVerified !== true && !(trustConnectorReads === true && event.sourceFormat === 'claude_plaintext' && typeof event.sourceReadAt === 'string' && Number.isFinite(Date.parse(event.sourceReadAt)))) { heldEvidence.push(event); continue; }
     if (event.kind === 'unclassified_purchase') { unclassifiedPurchases.push(event); continue; }
+    if (event.kind === 'invoice_recorded' && event.category === 'Unclassified') { unclassifiedPurchases.push(event); continue; }
     if (event.category === 'Unclassified' && ['refund_recorded', 'refund_pending'].includes(event.kind)) {
       refunds.set(transactionKey(event,true), event);
       unclassifiedPurchases.push(event);
@@ -409,7 +494,7 @@ function projectEvidence(events, { asOf = new Date().toISOString(), coverage = n
       group.nextBillingEvidenceId = null;
     } else if (event.kind === 'subscription_confirmed' || event.kind === 'trial_confirmed') {
       group.notSubscribed = false;
-      const renewalScheduled = event.kind === 'subscription_confirmed' || event.renewal === 'on'
+      const renewalScheduled = (event.kind === 'subscription_confirmed' && event.sourceFact !== 'subscription_active') || event.renewal === 'on'
         || event.nextBilling && Number.isSafeInteger(event.nextCharge?.minor) && event.nextCharge.minor > 0;
       if (renewalScheduled) {
         group.renewal = 'on'; group.renewalSourceAt = event.receivedAt;
@@ -457,6 +542,7 @@ function projectEvidence(events, { asOf = new Date().toISOString(), coverage = n
       if (event.accessEnds) group.accessSourceAt = event.receivedAt;
       group.warnings.push('Access end comes from a relative expiry notice. Renewal status needs checking.');
     } else if (event.kind === 'renewal_notice') {
+      if (event.plan) group.plan = event.plan;
       if(event.recurringRate)group.recurringRate=event.recurringRate;
       if(event.cadence)group.cadence=event.cadence;
       if (event.accessEnds) group.accessEnds = event.accessEnds;
@@ -486,8 +572,10 @@ function projectEvidence(events, { asOf = new Date().toISOString(), coverage = n
     const chargesAfterOff = group.renewal === 'off' ? sourceEvents.filter(e=>e.kind === 'payment_succeeded' && e.paymentDay && e.paymentDay > (group.renewalSourceAt || '').slice(0,10)) : [];
     const invoicesAfterOff = group.renewal === 'off' ? sourceEvents.filter(e=>e.kind === 'invoice_recorded' && e.receivedAt > group.renewalSourceAt
       && (!e.invoiceDay || e.invoiceDay >= group.renewalSourceAt.slice(0,10))) : [];
-    if(chargesAfterOff.length || invoicesAfterOff.length)status='needs_verification';
+    const plansAfterOff = group.renewal === 'off' ? sourceEvents.filter(e=>['plan_renamed','plan_updated'].includes(e.sourceFact) && e.receivedAt > group.renewalSourceAt) : [];
+    if(chargesAfterOff.length || invoicesAfterOff.length || plansAfterOff.length)status='needs_verification';
     if(invoicesAfterOff.length)warnings.push('Later invoice evidence followed recorded cancellation. It does not establish payment or reactivation; current status needs checking.');
+    if(plansAfterOff.length)warnings.push('Later account-plan evidence followed recorded cancellation. It does not establish payment or reactivation; current status needs checking.');
     const paymentConflict = sourceEvents.some(e=>conflictedPaymentSources.has(e.id));
     const relatedHeld = heldEvidence.some(e=>scope(e) === group.serviceKey || !e.accountRef && e.serviceKey === group.providerServiceKey) || paymentConflict;
     if (paymentConflict && ['active','paid_access'].includes(status)) status = 'needs_verification';
