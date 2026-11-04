@@ -1,5 +1,7 @@
 # SubsNotes local report and AI reader
 
+[English guide](../guide/en/how-it-works.md) · [繁體中文使用指南](../guide/zh-TW/how-it-works.md)
+
 Requires Node.js 22+. The report is read-only and supports English/Traditional Chinese, evidence filters, recorded payments and estimated display-currency conversion.
 
 From the repository root, run `npm ci --prefix renew-before-service`, `npm run sample`, then `npm start` for fictional data.
@@ -36,8 +38,20 @@ RENEW_BEFORE_DATA_DIR='/absolute/path/to/private-evidence' npm run mcp
 
 Configure a compatible host with this command. It exposes four read-only tools and opens no network port. It cannot authorize Gmail, cancel a plan or create a schedule.
 
-Build the local reader with `npm run package:mcpb`; output is `dist/SubsNotes-Evidence-Reader-0.1.0.mcpb`. A user selects the existing evidence folder during setup. The technical identifier and `RENEW_BEFORE_DATA_DIR` setting remain compatible with earlier local installations.
+Build the local reader with `npm run package:mcpb`; output is `dist/SubsNotes-Evidence-Reader-<manifest-version>.mcpb` (the exact filename is printed by the builder). A user selects the existing evidence folder during setup. The technical identifier and `RENEW_BEFORE_DATA_DIR` setting remain compatible with earlier local installations.
 
 The [subscription review skill](skills/subscription-review/SKILL.md) provides usage instructions for a host with separately authorized Gmail and local file tools. A failed or partial refresh must not claim a successful mailbox check. Google OAuth setup and host permissions are not supplied by installing this reader.
 
 Run `npm test` for the fictional-data tests. See [security guidance](../SECURITY.md) before sharing data.
+
+## Optional public artwork cache
+
+Bundled reviewed marks retain their owner notices and use initials when unavailable. The separate integration directory is a dated public snapshot, not permission to redistribute every image.
+
+From the repository root, an explicit full-catalog cache can be created outside the source tree:
+
+```sh
+npm run cache:logos -- --all-public-catalog --directory /private/subsnotes-logo-cache
+```
+
+This can take several minutes and hundreds of MB. It downloads the whole public catalog, not an account's subscription-selected brands, and is not needed for normal use. Add `--logo-cache /private/subsnotes-logo-cache` to a supported view command to embed local matching images. Do not commit or redistribute this unreviewed cache as MIT artwork.

@@ -38,10 +38,17 @@ export function createEvidenceServer({ directory = defaultDataDirectory() } = {}
     const cashflow = createCashflowRuntime().summarize(s, { trustConnectorReads:true });
     return { asOf: s.asOf, coverage: s.coverage, counts: s.subscriptions.reduce((a, r) => ({ ...a, [r.status]: (a[r.status] || 0) + 1 }), {}), subscriptions: s.subscriptions,
       recordedGrossPaidMinorByCurrency: cashflow.paidMinorByCurrency, providerRefundMinorByCurrency:cashflow.providerRefundMinorByCurrency,
+      sourcePaidMinorByCurrency:cashflow.sourcePaidMinorByCurrency,
+      userConfirmationAvailability:Object.hasOwn(s,'paymentConfirmations')?'included_in_private_snapshot':'not_in_snapshot',
+      userConfirmedPaidMinorByCurrency:Object.hasOwn(s,'paymentConfirmations')?cashflow.userConfirmedPaidMinorByCurrency:null,
+      userConfirmedCount:Object.hasOwn(s,'paymentConfirmations')?cashflow.userConfirmedCount:null,
+      monthPrecisionPaymentCount:Object.hasOwn(s,'paymentConfirmations')?cashflow.monthPrecisionPaymentCount:null,
+      confirmationConflicts:cashflow.confirmationConflicts,
+      userConfirmedPayments:cashflow.included.filter(row=>row.cashflowType==='user_confirmed_payment').map(row=>({id:row.id,serviceKey:row.serviceKey,service:row.service,payment:row.payment,paymentDay:row.paymentDay,paymentMonth:row.paymentMonth,paymentDatePrecision:row.paymentDatePrecision,provenance:row.paymentConfirmation.provenance,revision:row.paymentConfirmation.revision})),
       financialExclusions:cashflow.excluded, unallocatedPaymentCount:cashflow.excluded.filter(row=>!row.refund&&row.reason==='payment_date_unknown').length, paymentBasis:cashflow.basis, bankReconciled:false,
       pendingInvoices:cashflow.pendingInvoices, unverifiedInvoiceCount:cashflow.pendingInvoices.length,
       unconfirmedCurrencyPayments: s.unconfirmedCurrencyPayments, oneTimePurchases: s.oneTimePurchases, refunds: s.refunds,
-      limits: 'Not a live provider account or bank feed. Only source-verified payments with explicit payment dates, known amounts and currencies enter gross subscription totals. Annual charges stay whole in the payment month. Excluded records, one-time purchases and provider refunds remain separate. Refund evidence does not establish bank settlement. No keep/cancel recommendation is implied.' };
+      limits: 'Not a live provider account or bank feed. Source-backed dated payments and explicitly user-confirmed day/month payments are reported separately. A user confirmation is user-reported, not bank proof. An absent confirmation overlay means unavailable, not zero. This local snapshot is not automatically linked to Claude Artifact storage. Annual charges stay whole in the payment month; month-only confirmations never invent a day. Excluded records, one-time purchases and provider refunds remain separate. Refund evidence does not establish bank settlement. No keep/cancel recommendation is implied.' };
   }));
   server.registerTool('list_subscriptions', { description: 'List local service history records by evidence state. Active means future renewal evidence in email, not a live billing API confirmation. The legacy likely_canceled status code means likely inactive: an unconfirmed estimate from a renewal more than 60 days overdue or multiple unresolved billing signals. Assessments expose evidence strength, chronology and source IDs, not a statistical probability or provider cancellation.', inputSchema: z.object({ status: z.enum(['active','paid_access','renewal_off','needs_verification','payment_problem','likely_canceled','expired']).optional() }).strict(), annotations }, safe(async ({ status }) => {
     const s = await privateJson(root, 'snapshot.json');

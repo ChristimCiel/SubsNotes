@@ -3,6 +3,37 @@ name: subscription-review
 description: Review the user's subscription status, cancellation history, receipts and recurring spending using connected Gmail and dated evidence. Use for a subscription scan or update, not general inbox summaries or provider billing changes.
 ---
 
+## Language and user prompts / 語言與使用者提示
+
+Use the user's chosen language for onboarding, explanations, validation, errors and summaries. Canonical locales are `en` and `zh-TW`; accept legacy `zh` as Traditional Chinese. Preserve the same ledger and saved language preference when switching. Do not translate source identifiers, ISO currencies or stored calendar precision.
+
+使用使用者選定的語言呈現首次設定、說明、驗證、錯誤與摘要。正式代碼為 `en`、`zh-TW`，舊 `zh` 仍視為繁體中文。切換時保留同一份帳本與語言偏好，不翻譯來源識別碼、ISO 幣別或日期精確程度。
+
+| Task / 任務 | English | 繁體中文 |
+| --- | --- | --- |
+| Start / 開始 | Use SubsNotes to find my personal subscriptions. Keep the ledger private and show the saved dashboard in English. | 使用 SubsNotes 整理我的個人訂閱，將帳本保存在私人空間，並以繁體中文開啟已儲存的儀表板。 |
+| Reopen / 重開 | Open my saved SubsNotes dashboard. Do not create another ledger. | 開啟我已儲存的 SubsNotes 儀表板，不要建立另一份帳本。 |
+| Review / 核對 | Show which payment records need a date or month, with their original sources. | 列出缺少付款日期或月份的紀錄，並顯示原始來源。 |
+| Update / 更新 | Check Gmail for changes in the same private ledger. Preserve my payment confirmations and preferences. | 在同一份私人帳本檢查 Gmail 變更，保留我的付款確認與偏好設定。 |
+
+When a capability is missing, name it in ordinary language and give the smallest supported next step. Examples: **“Gmail is not connected; no scan has run.” / 「尚未連接 Gmail，本次沒有執行掃描。」** **“Your save was not confirmed. Reopen the latest ledger before retrying.” / 「尚未確認儲存成功，請重開最新帳本後再試。」** **“This document needs a password. Unlock it locally and provide only the relevant billing lines; do not share the password.” / 「這份文件需要密碼，請先在本機解鎖，再提供相關帳務列，不要提供密碼。」**
+
+## Payment confirmations / 付款確認
+
+The saved dashboard's **Confirm payment / 確認付款** flow is an explicit user action on an individual invoice or payment record. Check amount and currency, then choose **Exact date / 精確日期** or **Month only / 只確認月份**. **Confirmed by you / 由你確認** is a user report, separate from extracted source evidence and bank reconciliation. Month-only precision is not an exact payment day; never invent the first day of a month.
+
+已儲存儀表板的「確認付款」是使用者對個別發票或付款紀錄的明確操作。核對金額與幣別後，選精確日期或只確認月份。「由你確認」是本人回報，與來源擷取及銀行對帳分開；只有月份時不得虛構該月一日。
+
+Use **Edit confirmation / 編輯確認** for an intentional correction, or **Remove confirmation / 撤回確認** to withdraw it. Preserve original evidence and confirmation history. If the user says they paid but cannot establish a month, acknowledge that statement and explain that only the date/month is still missing; do not describe the statement as proof of nonpayment, choose a month from the invoice/email date, or silently write a guessed payment.
+
+更正時使用「編輯確認」，撤回時使用「撤回確認」，並保留來源及確認歷史。如果使用者說確實已付，但不能確認月份，應承認這項本人陳述，說明仍缺日期／月份；不能當作沒有付款，也不能從發票日／收信日猜月份寫入。
+
+An AI extraction, suggestion or portable import must never assign user-confirmation authority to itself. Use the supported confirmation UI to create/edit a confirmation, and the current canonical ledger plus supported update path for Gmail/AI synchronization. Preserve the confirmation overlay unchanged when processing source mail. Refuse a stale write and reload before retrying. Application-level preservation does not protect against arbitrary raw database writes by a privileged host or assistant bypassing these APIs. Keep one writable dashboard open.
+
+AI 擷取、提案或可攜匯入不能自行取得本人確認權限。建立／編輯確認請走既有 UI；Gmail／AI 同步使用最新權威帳本與受支援路徑，處理來源時保留確認層。舊版本寫入須拒絕並重讀；這是應用層保護，不能防止有原始資料庫寫入權的平台或助理繞過 API。同時只開一份可寫入儀表板。
+
+## Evidence and supported host operations
+
 Help the user answer three questions: what have I paid, what happens next, and where can I manage the plan? Start with a compact subscription list, not a wall of metrics. Keep the original currency, amount basis, next charge or recorded access end, and a source link visible. Let the user decide what to keep.
 
 Use the user's existing Gmail connection in the assistant host. This skill does not connect or authorize Gmail by itself. If Gmail is unavailable, direct the user to the host's Gmail connection settings and report that no scan has occurred. Do not change permissions, add connectors or configure schedules merely because the skill is installed.
@@ -19,7 +50,7 @@ For an ordinary **open/reopen** request, first return the user's known private d
 
 Inside the saved app, **Refresh** reloads and verifies saved records without scanning Gmail. **Check Gmail** performs the existing bounded read-only synchronization. Optional foreground auto-refresh remains available. Reuse the existing personal store and source history; never initialize a second writable ledger as an opening shortcut. Reopen links work independently of chat generation, but host login/network availability and native storage permissions still apply. Keep one writable dashboard open at a time.
 
-Only generate a new compact in-chat read view when the user explicitly requests it there, or after a confirmed data change when a dated snapshot is wanted. Reuse an already saved chat visual for reopening the same snapshot. Generating a complete new HTML visual has model/host output latency and is not the fast reopening route. When code execution and a canonical state file are available, run `node scripts/subscription-view.mjs --state /private/state.json --output /private/subscriptions-inline.html --surface inline --language en` (or `zh`) from the skill directory. Optionally add `--month YYYY-MM`, `--currency TWD` and `--snapshot-json /private/view.json`. In a repository checkout, prefix the script path with `renew-before-service/`. Keep all inputs and generated financial outputs privately outside repositories; do not recalculate totals in model prose.
+Only generate a new compact in-chat read view when the user explicitly requests it there, or after a confirmed data change when a dated snapshot is wanted. Reuse an already saved chat visual for reopening the same snapshot. Generating a complete new HTML visual has model/host output latency and is not the fast reopening route. When code execution and a canonical state file are available, run `node scripts/subscription-view.mjs --state /private/state.json --output /private/subscriptions-inline.html --surface inline --language en` (or `zh-TW`; legacy `zh` remains compatible) from the skill directory. Optionally add `--month YYYY-MM`, `--currency TWD` and `--snapshot-json /private/view.json`. In a repository checkout, prefix the script path with `renew-before-service/`. Keep all inputs and generated financial outputs privately outside repositories; do not recalculate totals in model prose.
 
 If the host supports native in-chat HTML visuals, render the generated read-only view there. Generating HTML or React is not evidence that a host can display it. If native visuals or execution are unavailable, use the existing private Artifact or a plain in-chat table and say which capability was unavailable. The read view offers local search, state filtering, sorting and expandable source details. It has no privileged tool, storage or cancellation bridge: requests to refresh, edit a review note or find cancellation steps go through the normal conversation and the host's actually available tools. Re-render after a confirmed ledger update. A new chat or device does not make a snapshot live.
 
@@ -86,10 +117,10 @@ For subsequent connector refreshes, use the incremental workflow instead of resc
 
 Set `backgroundUpdatesConfigured` to true only during a run of an actually activated schedule, never for a proposed schedule or a manual test. The finish step excludes overlapping commits, rejects stale baselines, rebuilds the saved report and advances the checkpoint only after writes succeed. Per-file atomic replacement is not a full database transaction; a failed write must still be retried. Reload an open browser report to read the new saved version; the MCP reader reads the saved files on each call.
 
-For expense questions, use the shared dated cashflow rules: a receipt or invoice date does not establish the actual payment day. Keep annual payments whole in the payment month. Do not include one-time purchases, donations, invoices or unresolved payments in subscription spending. A source with zero parsed events still needs semantic review; use the shared explicit non-billing review helper only after reading the complete original and verifying that it contains no billing or subscription event. Preserve reviewed fields and original email links during updates.
+For expense questions, use the shared cashflow rules. Source-recorded payments require supported payment-date evidence; explicit user confirmations may establish an exact day or a month with user provenance. A receipt or invoice date alone does not establish the actual payment day. Keep annual payments whole in the confirmed payment month. Do not include one-time purchases, donations, unconfirmed invoices or unresolved payments in subscription spending. Never recalculate or promote an AI guess in prose. A source with zero parsed events still needs semantic review; use the shared explicit non-billing review helper only after reading the complete original and verifying that it contains no billing or subscription event. Preserve reviewed fields and original email links during updates.
 
 
-In the native saved dashboard, Subscriptions and Payments answer different questions for the selected month. Subscriptions shows documented service periods and records whose dates still need checking; current inactivity does not erase historical evidence. Payments shows only verified dated transactions, with annual charges whole in their payment month. Changing a month preserves the selected view. Prices on subscription rows are recorded amounts from all dates, not historical-month spending.
+In the native saved dashboard, Subscriptions and Payments answer different questions for the selected month. Subscriptions shows documented service periods and records whose dates still need checking; current inactivity does not erase historical evidence. Payments shows source-recorded and explicitly user-confirmed payments allocated to the selected period, with their provenance and day/month precision. Annual charges stay whole in their confirmed payment month. Changing a month preserves the selected view. Prices on subscription rows are recorded amounts from all dates, not historical-month spending.
 
 Use Your data & update settings → Review selected month for a bounded historical Gmail review. Spam/Trash review is optional and never makes a source verified. A completed query is not completed extraction or a complete mailbox audit. Automatic checks use recent mail while the page is open; paused historical work requires Continue. In headless updates, optional input `scan` accepts `since`, `until`, `includeSpamTrash`, `recentOnly`, and `maxReads`; range bounds use epoch seconds or ISO dates with explicit offsets. Fetch every referenced event and checkpoint chunk before planning; checkpoint document IDs use `checkpoints-` plus a SHA256. All such reads and outputs remain private.
 

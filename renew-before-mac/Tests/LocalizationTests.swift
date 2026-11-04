@@ -3,6 +3,15 @@ import XCTest
 @testable import RenewCore
 
 final class LocalizationTests: XCTestCase {
+    func testCanonicalLanguageCodesKeepLegacyChinesePreferencesReadable() {
+        XCTAssertEqual(AppLanguage.traditionalChinese.rawValue, "zh-TW")
+        for code in ["zh", "zh-TW", "zh-Hant", "zh-Hant-TW"] {
+            XCTAssertEqual(AppLanguage.resolve(code), .traditionalChinese)
+        }
+        XCTAssertEqual(AppLanguage.resolve("en"), .english)
+        XCTAssertEqual(AppLanguage.resolve(nil), .english)
+        XCTAssertEqual(L10n.text("Price unknown", language: AppLanguage.resolve("zh-Hant")), "價格未知")
+    }
     func testConsumerFlowsAreAvailableInBothLanguages() {
         for key in ["Subscriptions", "Payments", "Stop renewing", "Set reminder", "Yes, renewal is off",
                     "When should we remind you?", "Back to subscriptions", "Not a subscription",

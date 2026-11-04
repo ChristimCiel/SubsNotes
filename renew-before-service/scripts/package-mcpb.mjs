@@ -9,7 +9,7 @@ if (!npmCli) throw new Error('Run this builder through npm run package:mcpb');
 const stage = await mkdtemp(join(tmpdir(), 'renew-before-reader-build-'));
 await mkdir(join(stage, 'src'));
 // Explicit allowlist. No private data, environment files or application exports.
-for (const file of ['mcp.mjs','cashflow.mjs']) await cp(join(root, 'src', file), join(stage, 'src', file));
+for (const file of ['mcp.mjs','cashflow.mjs','payment-confirmations.mjs']) await cp(join(root, 'src', file), join(stage, 'src', file));
 await cp(join(root, 'mcpb', 'manifest.json'), join(stage, 'manifest.json'));
 for (const file of ['package.json','package-lock.json','LICENSE']) await cp(join(root, file), join(stage, file));
 const run = (args, cwd) => {

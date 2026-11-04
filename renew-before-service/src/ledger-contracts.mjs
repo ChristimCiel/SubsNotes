@@ -1,6 +1,8 @@
+import {createPaymentConfirmationRuntime} from './payment-confirmations.mjs';
 // Shared JSON contracts. A hash detects corruption, not who supplied a record.
 // Keep this factory self-contained so browser and CLI hosts use the same rules.
 export function createLedgerContracts() {
+  const confirmations=createPaymentConfirmationRuntime();
   const kinds = new Set(['payment_succeeded','refund_recorded','refund_pending','renewal_disabled','subscription_confirmed','trial_confirmed','payment_failed','access_paused','access_expiring','access_expired','renewal_notice','one_time_purchase','wallet_top_up','unclassified_purchase','account_not_subscribed','invoice_recorded']);
   const currencies = new Set(Intl.supportedValuesOf('currency'));
   const object = value => value && typeof value === 'object' && !Array.isArray(value);
@@ -70,6 +72,7 @@ export function createLedgerContracts() {
   }
   function compactCheckpointMetadata(state) {
     state=expandCheckpointMetadata(state);
+    if(!object(state.sourceProcessing))return state;
     const ids=state.scannedIds,keys=object(state.sourceProcessing)?Object.keys(state.sourceProcessing):[];
     if(!Array.isArray(ids)||ids.length!==keys.length||new Set(ids).size!==ids.length||ids.some(id=>!Object.hasOwn(state.sourceProcessing,id)))return state;
     const {scannedIds,...rest}=state;
@@ -86,6 +89,8 @@ export function createLedgerContracts() {
     if (expectedMailboxHash && state.mailboxHash !== expectedMailboxHash) throw new Error('The ledger belongs to a different mailbox');
     if (state.storageRevision != null) text(state.storageRevision,'storage revision');
     if (requireRevision && !state.storageRevision) throw new Error('A persisted ledger revision is required');
+    if(Object.hasOwn(state,'paymentConfirmationChunks'))throw new Error('Load the complete saved confirmations before validating');
+    if(Object.hasOwn(state,'paymentConfirmations'))state.paymentConfirmations=confirmations.validate(state.paymentConfirmations);
     const byId = new Map();
     for (const event of state.events) {
       if (!object(event)) throw new Error('Invalid source record');
@@ -108,7 +113,7 @@ export function createLedgerContracts() {
   // Exact source quotes bind a proposal to text; they do not verify semantics.
   function validateCandidate(candidate, {observation, expectedMailboxHash = null} = {}) {
     if (!object(candidate) || candidate.schemaVersion !== 1 || !object(observation)) throw new Error('A versioned candidate and actual source observation are required');
-    for (const key of ['authenticated','userVerified','receiptVerification','sourceFormat','sourceReadAt','senderAuthenticationAvailable']) if (Object.hasOwn(candidate,key)) throw new Error('Candidates cannot supply source authority');
+    for (const key of ['authenticated','userVerified','receiptVerification','sourceFormat','sourceReadAt','senderAuthenticationAvailable','paymentConfirmations','paymentConfirmation']) if (Object.hasOwn(candidate,key)) throw new Error('Candidates cannot supply source authority');
     text(observation.messageId,'observed message identity'); text(observation.text,'observed source text',1_000_000);
     if (!instant(observation.observedAt) || !instant(observation.receivedAt)) throw new Error('Observed source times are required');
     if (candidate.messageId !== observation.messageId) throw new Error('Candidate does not match the observed message');
@@ -148,6 +153,7 @@ export function createLedgerContracts() {
     const payload = {format:bundle.format,schemaVersion:bundle.schemaVersion,state:bundle.state};
     if (await hash(canonicalJSON(payload)) !== bundle.integrity.value) throw new Error('Portable ledger integrity check failed');
     const state = validateCanonicalState(bundle.state,{expectedMailboxHash});
+    if(state.paymentConfirmations){state.importedPaymentConfirmations=state.paymentConfirmations;delete state.paymentConfirmations;}
     for (const event of state.events) {
       if (event.receiptVerification) {event.importedReceiptVerification=event.receiptVerification;delete event.receiptVerification;}
       event.authenticated=false; event.userVerified=false; event.sourceFormat='portable_import'; event.sourceReadAt=null;

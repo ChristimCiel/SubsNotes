@@ -37,7 +37,7 @@ export async function runAssistantSync(args,api) {
     ||typeof payload.runId!=='string'||!payload.runId.trim()||payload.runId.length>200||typeof payload.asOf!=='string'||!payload.asOf.includes('T')||!Number.isFinite(Date.parse(payload.asOf)))throw new Error('A run identity, processing time, documents and observations are required');
   const documents=new Map();
   for(const doc of payload.documents){
-    if(!doc||typeof doc!=='object'||!(doc.id==='subsnotes-state-v1'||/^events-[a-f0-9]{64}$/.test(doc.id))||!doc.data||typeof doc.data!=='object'||Array.isArray(doc.data)||documents.has(doc.id))throw new Error('Invalid or duplicate private document');
+    if(!doc||typeof doc!=='object'||!(doc.id==='subsnotes-state-v1'||/^(?:events|checkpoints|confirmations)-[a-f0-9]{64}$/.test(doc.id))||!doc.data||typeof doc.data!=='object'||Array.isArray(doc.data)||documents.has(doc.id))throw new Error('Invalid or duplicate private document');
     documents.set(doc.id,doc.data);
   }
   const observations=new Map();

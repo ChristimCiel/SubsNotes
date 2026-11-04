@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { extractEvidence, projectEvidence } from '../src/evidence.mjs';
+import { createPaymentConfirmationRuntime } from '../src/payment-confirmations.mjs';
 
 test('real stdio MCP discovery and tools read only the configured private dataset', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'renew-before-mcp-fixture-'));
@@ -38,6 +39,20 @@ test('real stdio MCP discovery and tools read only the configured private datase
     assert.equal(dashboard.structuredContent.unverifiedInvoiceCount,1);
     assert.equal(dashboard.structuredContent.pendingInvoices[0].messageId,'fictional-tax-mail');
     assert.equal(dashboard.structuredContent.pendingInvoices[0].reviewReason,'payment_unverified');
+    assert.equal(dashboard.structuredContent.userConfirmationAvailability,'not_in_snapshot');
+    assert.equal(dashboard.structuredContent.userConfirmedCount,null);
+    const confirmed=createPaymentConfirmationRuntime().set({version:1,events},{eventId:'fictional-chatgpt-invoice',precision:'month',month:'2026-10',amount:{currency:'EUR',minor:1900},expectedRevision:0},{now:'2026-11-02T00:00:00Z'});
+    await writeFile(join(directory,'snapshot.json'),JSON.stringify({...snapshot,paymentConfirmations:confirmed.paymentConfirmations}));
+    const manual=(await client.callTool({name:'get_dashboard',arguments:{}})).structuredContent;
+    assert.deepEqual(manual.recordedGrossPaidMinorByCurrency,{USD:2000,EUR:1900});
+    assert.deepEqual(manual.sourcePaidMinorByCurrency,{USD:2000});
+    assert.deepEqual(manual.userConfirmedPaidMinorByCurrency,{EUR:1900});
+    assert.equal(manual.userConfirmationAvailability,'included_in_private_snapshot');
+    assert.equal(manual.userConfirmedCount,1);assert.equal(manual.monthPrecisionPaymentCount,1);
+    assert.equal(manual.userConfirmedPayments[0].paymentDay,null);
+    assert.equal(manual.userConfirmedPayments[0].paymentMonth,'2026-10');
+    assert.equal(manual.userConfirmedPayments[0].provenance,'user');
+    assert.equal(manual.unverifiedInvoiceCount,0);
     const inactive=await client.callTool({name:'list_subscriptions',arguments:{status:'likely_canceled'}});
     assert.equal(inactive.structuredContent.subscriptions.length,1);assert.equal(inactive.structuredContent.subscriptions[0].inactivityInference.confirmed,false);
     const evidence = await client.callTool({ name: 'get_evidence', arguments: { serviceKey: 'claude' } });

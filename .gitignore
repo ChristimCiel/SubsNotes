@@ -5,6 +5,8 @@ build/
 DerivedData/
 coverage/
 renew-before-service/dist/
+renew-before-demo/dist/confirmations.html
+renew-before-demo/dist/confirmations.js
 *.app/
 *.dmg
 *.mcpb

@@ -13,6 +13,8 @@ import { createServiceBrandsRuntime } from '../src/service-brands.mjs';
 import { createSourceEvidenceMerger } from '../src/web-sync.mjs';
 import { preserveReceiptVerification } from '../src/receipt-verification.mjs';
 import { createLedgerContracts } from '../src/ledger-contracts.mjs';
+import { createI18nRuntime } from '../src/i18n.mjs';
+import { createPaymentConfirmationRuntime } from '../src/payment-confirmations.mjs';
 
 const flush = () => new Promise(resolve=>setImmediate(resolve));
 const clone = value => JSON.parse(JSON.stringify(value));
@@ -29,8 +31,10 @@ async function harness({events=null,prefs={},freezePreferences=false,now=null,mc
     set innerHTML(value) {
       this._html=value;
       if(this.id==='detail-body') {
-        elements.delete('review');elements.delete('review-result');
-        if(value.includes('id="review"')) {elements.set('review',new Element('review'));elements.set('review-result',new Element('review-result'));}
+        for(const [id]of elements)if(id==='review'||id==='review-result'||id.startsWith('confirm-')||id.startsWith('confirmation-'))elements.delete(id);
+        for(const [,attrs,id]of value.matchAll(/<[^>]*?(\bid="([^"]+)"[^>]*)>/g)) {
+          const element=new Element(id),initial=attrs.match(/\bvalue="([^"]*)"/);element.value=initial?.[1]||'';element.hidden=/\bhidden(?:\s|$)/.test(attrs);elements.set(id,element);
+        }
       }
     }
     get innerHTML() {return this._html;}
@@ -43,11 +47,12 @@ async function harness({events=null,prefs={},freezePreferences=false,now=null,mc
   let persisted={version:1,events:events||['alpha','beta'].map(key=>({id:key,messageId:'synthetic-'+key,serviceKey:key,service:'Fictional '+key,category:'Software',kind:'payment_succeeded',authenticated:true,receivedAt:'2026-07-01T01:00:00Z',payment:{currency:'USD',minor:1200},paymentDay:'2026-07-01',paymentDateBasis:'explicit'})),prefs,...initialState};
   const pendingSaves=[];
   const store={load:async()=>{const state=clone(persisted);if(freezePreferences)Object.freeze(state.prefs);return state;},getRevision:async()=>persisted.storageRevision||null,save:next=>new Promise((resolve,reject)=>pendingSaves.push({next:clone(next),resolve:()=>{persisted=clone(next);resolve();},reject}))};
+  store.saveUserConfirmations=next=>store.save(next);
   const capabilities={mcp:{},db:{},user:{id:async()=>'fictional-user'},permissions:{manage(){}}};
   const window={claude:{use:async key=>key==='mcp'&&mcpReady?await mcpReady:capabilities[key]},addEventListener(){}};
   const ClockDate = now ? class extends Date { constructor(...args){super(...(args.length?args:[now]));}static now(){return new Date(now).getTime();} } : Date;
   const mount=vm.runInNewContext('('+mountClaudeDashboard.toString()+')',{document,window,crypto:webcrypto,TextEncoder,Date:ClockDate,setInterval(){}});
-  mount({createSubscriptionActivityRuntime,createEvidenceRuntime,createCashflowRuntime,createFxRuntime,createSubscriptionViewRuntime,createServiceBrandsRuntime,createSourceEvidenceMerger,preserveReceiptVerification,createLedgerContracts,extractWebEvidence(){},createClaudePersonalStore:()=>store,createClaudeRatesClient:()=>({load:async()=>{throw new Error('Rates unavailable in this test');}}),createClaudeGmailClient:()=>({}),createWebSync:()=>({run:syncRun||(()=>{throw new Error('No scan is requested by these tests');})})});
+  mount({createI18nRuntime,createPaymentConfirmationRuntime:()=>{const runtime=createPaymentConfirmationRuntime();return {...runtime,set:(state,input,options)=>runtime.set(state,clone(input),options)};},createSubscriptionActivityRuntime,createEvidenceRuntime,createCashflowRuntime,createFxRuntime,createSubscriptionViewRuntime,createServiceBrandsRuntime,createSourceEvidenceMerger,preserveReceiptVerification,createLedgerContracts,extractWebEvidence(){},createClaudePersonalStore:()=>store,createClaudeRatesClient:()=>({load:async()=>{throw new Error('Rates unavailable in this test');}}),createClaudeGmailClient:()=>({}),createWebSync:()=>({run:syncRun||(()=>{throw new Error('No scan is requested by these tests');})})});
   for(let i=0;i<4;i++)await flush();
   const open=async key=>{const button=new Element('row');button.dataset.record=key;button.closest=()=>button;await elements.get('list').dispatch('click',{target:button});};
   const change=days=>{const select=elements.get('review');select.value=String(days);return select.dispatch('change');};
@@ -440,4 +445,148 @@ test('a newly discovered invoice notification is queued even before its product 
  await app.elements.get('invoice-review').dispatch('click');
  assert.match(app.elements.get('list').innerHTML,/OpenAI/);assert.equal(app.elements.get('count').textContent,'1 records · All dates');
  await app.open(event.id);assert.match(app.elements.get('detail-body').innerHTML,/This invoice is not included in payments/);
+});
+
+async function flushUi(){for(let i=0;i<8;i++)await flush();}
+async function settleWrites(app){
+ app.settledWrites||=0;
+ for(let i=0;i<20;i++){
+  await flushUi();
+  const next=app.pendingSaves[app.settledWrites];if(!next)return;
+  next.resolve();app.settledWrites++;
+ }
+ throw new Error('Synthetic UI writes did not settle');
+}
+async function submitPayment(app,{precision='month',month='2026-08',date='',amount,currency}={}){
+ app.elements.get('confirm-precision').value=precision;await app.elements.get('confirm-precision').dispatch('change');
+ if(month!==undefined)app.elements.get('confirm-month').value=month;
+ if(date!==undefined)app.elements.get('confirm-date').value=date;
+ if(amount!==undefined)app.elements.get('confirm-amount').value=amount;
+ if(currency!==undefined)app.elements.get('confirm-currency').value=currency;
+ await app.elements.get('confirmation-form').dispatch('submit');await flushUi();
+}
+const confirmationNow='2027-02-12T00:00:00Z';
+
+test('an exact-day confirmation saves privately, leaves original evidence intact and appears only in its paid month',async()=>{
+ const invoice=fictionalInvoices[0],app=await harness({events:fictionalInvoices,prefs:{language:'en',view:'other',month:'2026-08'},now:confirmationNow});
+ await app.open(invoice.id);assert.ok(app.elements.get('confirmation-form'));
+ await submitPayment(app,{precision:'day',date:'2026-08-31'});
+ assert.equal(app.elements.get('confirm-save').disabled,true);assert.match(app.elements.get('confirmation-result').textContent,/Saving confirmation/);
+ await settleWrites(app);
+ const record=app.persisted.paymentConfirmations[invoice.id];assert.equal(record.precision,'day');assert.equal(record.date,'2026-08-31');assert.equal(record.provenance,'user');
+ assert.deepEqual(app.persisted.events,fictionalInvoices);assert.match(app.elements.get('detail-body').innerHTML,/Confirmed by you/);assert.match(app.elements.get('detail-body').innerHTML,/saved privately/);
+ assert.match(app.elements.get('invoice-review').textContent,/9 invoices/);assert.match(app.elements.get('originals').textContent,/EUR.*17\.00/);
+ await app.elements.get('confirm-view-payment').dispatch('click');await settleWrites(app);
+ assert.match(app.elements.get('tabs').innerHTML,/data-view="payments" aria-pressed="true"/);assert.match(app.elements.get('list').innerHTML,/Aug 31, 2026/);assert.match(app.elements.get('list').innerHTML,/Confirmed by you/);
+ app.elements.get('month').value='2026-09';await app.elements.get('month').dispatch('change');await settleWrites(app);
+ assert.doesNotMatch(app.elements.get('list').innerHTML,new RegExp('data-record="'+invoice.id+'"'));
+ const reopened=await harness({initialState:app.persisted,now:confirmationNow});assert.equal(reopened.persisted.paymentConfirmations[invoice.id].date,'2026-08-31');
+});
+
+test('month-only confirmation stores no invented day and migrates legacy Traditional Chinese on a saved user action',async()=>{
+ const invoice=fictionalInvoices[0],app=await harness({events:[invoice],prefs:{language:'zh',view:'other',month:'2026-02'},now:confirmationNow});
+ await app.open(invoice.id);await submitPayment(app,{precision:'month',month:'2026-02'});await settleWrites(app);
+ const record=app.persisted.paymentConfirmations[invoice.id];assert.equal(record.precision,'month');assert.equal(record.month,'2026-02');assert.equal(record.date,undefined);assert.equal(app.persisted.prefs.language,'zh-TW');
+ assert.match(app.elements.get('detail-body').innerHTML,/已確認月份・未指定日期/);assert.doesNotMatch(JSON.stringify(record),/2026-02-01/);
+ await app.elements.get('confirm-view-payment').dispatch('click');await settleWrites(app);
+ assert.match(app.elements.get('list').innerHTML,/2026年2月/);assert.match(app.elements.get('list').innerHTML,/由你確認/);assert.doesNotMatch(app.elements.get('list').innerHTML,/2026年2月1日/);
+ const reopened=await harness({initialState:app.persisted,now:confirmationNow});assert.match(reopened.elements.get('list').innerHTML,/2026年2月/);
+ reopened.elements.get('detail').close();await reopened.elements.get('language').dispatch('click');await settleWrites(reopened);
+ assert.equal(reopened.persisted.prefs.language,'en');assert.match(reopened.elements.get('list').innerHTML,/February 2026/);
+ assert.deepEqual(reopened.persisted.paymentConfirmations,app.persisted.paymentConfirmations);
+});
+
+test('editing, undoing and removing a confirmation preserve history and original invoices without duplicating payments',async()=>{
+ const invoice=fictionalInvoices[0],app=await harness({events:[invoice],prefs:{language:'en',view:'other',month:'all'},now:confirmationNow});
+ await app.open(invoice.id);await submitPayment(app,{precision:'day',date:'2026-08-25'});await settleWrites(app);
+ assert.equal(app.elements.get('confirm-undo'),undefined);
+ await app.elements.get('confirm-edit').dispatch('click');await submitPayment(app,{precision:'month',month:'2026-09',currency:'JPY',amount:'800'});await settleWrites(app);
+ let record=app.persisted.paymentConfirmations[invoice.id];assert.equal(record.revision,2);assert.equal(record.month,'2026-09');assert.deepEqual(record.amount,{minor:800,currency:'JPY'});assert.equal(record.history.length,1);
+ assert.match(app.elements.get('detail-body').innerHTML,/New source information differs/);
+ await app.elements.get('confirm-undo').dispatch('click');await settleWrites(app);record=app.persisted.paymentConfirmations[invoice.id];assert.equal(record.revision,3);assert.equal(record.date,'2026-08-25');assert.equal(record.amount.currency,'EUR');
+ await app.elements.get('confirm-remove').dispatch('click');await settleWrites(app);assert.equal(app.persisted.paymentConfirmations[invoice.id].active,false);assert.match(app.elements.get('invoice-review').textContent,/1 invoices/);assert.match(app.elements.get('detail-body').innerHTML,/removed/);
+ await app.elements.get('confirm-undo').dispatch('click');await settleWrites(app);record=app.persisted.paymentConfirmations[invoice.id];assert.equal(record.active,true);assert.equal(record.revision,5);assert.equal(record.history.length,4);assert.deepEqual(app.persisted.events,[invoice]);
+ assert.match(app.elements.get('originals').textContent,/EUR.*17\.00/);assert.equal(app.elements.get('invoice-review').hidden,true);
+});
+
+test('invalid calendar days and currency precision show localized errors without saving a confirmation',async()=>{
+ for(const language of ['en','zh-TW']){
+  const app=await harness({events:[fictionalInvoices[0]],prefs:{language,view:'other'},now:confirmationNow});await app.open(fictionalInvoices[0].id);
+  await submitPayment(app,{precision:'day',date:'2026-02-30'});assert.equal(app.pendingSaves.length,0);assert.equal(app.persisted.paymentConfirmations,undefined);assert.match(app.elements.get('detail-body').innerHTML,language==='en'?/valid payment date/:/有效的付款日期/);
+  await submitPayment(app,{precision:'month',month:'2026-03',currency:'JPY',amount:'1.23'});assert.equal(app.pendingSaves.length,0);assert.match(app.elements.get('detail-body').innerHTML,language==='en'?/decimal places/:/小數位數/);
+ }
+});
+
+test('a failed payment save keeps the persisted confirmation and the unsaved draft with clear recovery feedback',async()=>{
+ const invoice=fictionalInvoices[0],initial=createPaymentConfirmationRuntime().set({events:[invoice],prefs:{language:'en',view:'other'}},{eventId:invoice.id,precision:'day',date:'2026-07-08',amount:{currency:'EUR',minor:1700},expectedRevision:0},{now:confirmationNow});
+ const app=await harness({initialState:initial,now:confirmationNow});await app.open(invoice.id);await app.elements.get('confirm-edit').dispatch('click');await submitPayment(app,{precision:'month',month:'2026-08',amount:'19.60'});
+ assert.equal(app.pendingSaves.length,1);app.pendingSaves[0].reject(new Error('Synthetic private https://example.invalid/secret'));await flushUi();
+ assert.equal(app.persisted.paymentConfirmations[invoice.id].date,'2026-07-08');assert.equal(app.elements.get('confirm-amount').value,'19.60');assert.match(app.elements.get('detail-body').innerHTML,/could not be confirmed/);assert.doesNotMatch(app.elements.get('detail-body').innerHTML,/example|secret/);
+});
+
+test('a stale edit cannot overwrite a later saved confirmation',async()=>{
+ const runtime=createPaymentConfirmationRuntime(),invoice=fictionalInvoices[0];let initial=runtime.set({events:[invoice],prefs:{language:'en',view:'other'}},{eventId:invoice.id,precision:'month',month:'2026-06',amount:{currency:'EUR',minor:1700},expectedRevision:0},{now:confirmationNow});
+ const app=await harness({initialState:initial,now:confirmationNow});await app.open(invoice.id);await app.elements.get('confirm-edit').dispatch('click');
+ const external=runtime.set(app.persisted,{eventId:invoice.id,precision:'month',month:'2026-07',amount:{currency:'EUR',minor:1700},expectedRevision:1},{now:confirmationNow});app.replace(external);
+ await submitPayment(app,{precision:'month',month:'2026-08'});assert.equal(app.pendingSaves.length,0);assert.equal(app.persisted.paymentConfirmations[invoice.id].month,'2026-07');assert.match(app.elements.get('detail-body').innerHTML,/changed elsewhere/);
+ app.elements.get('detail').close();await app.open(invoice.id);assert.match(app.elements.get('detail-body').innerHTML,/July 2026/);await app.elements.get('confirm-edit').dispatch('click');await submitPayment(app,{precision:'month',month:'2026-08'});await settleWrites(app);assert.equal(app.persisted.paymentConfirmations[invoice.id].month,'2026-08');assert.equal(app.persisted.paymentConfirmations[invoice.id].revision,3);
+});
+
+test('a scan waits for an accepted confirmation save and retains it when the source data is refreshed',async()=>{
+ const invoice=fictionalInvoices[0];let observed;
+ const app=await harness({events:[invoice],prefs:{language:'en',view:'other',month:'all'},now:confirmationNow,syncRun:async()=>{observed=app.persisted.paymentConfirmations;return{state:app.persisted,complete:true,scanKind:'history_review'};}});
+ await app.open(invoice.id);await submitPayment(app,{precision:'month',month:'2026-08'});assert.equal(app.pendingSaves.length,1);
+ await app.elements.get('sync').dispatch('click');await flushUi();assert.equal(observed,undefined);assert.equal(app.elements.get('confirm-save').disabled,true);
+ await settleWrites(app);await flushUi();assert.equal(observed[invoice.id].month,'2026-08');assert.equal(app.persisted.paymentConfirmations[invoice.id].month,'2026-08');assert.match(app.elements.get('detail-body').innerHTML,/Confirmed by you/);
+});
+
+
+test('future renewal dates and months cannot be saved as payments that already happened in either language',async()=>{
+ for(const language of ['en','zh-TW']){
+  const app=await harness({events:[fictionalInvoices[0]],prefs:{language,view:'other'},now:confirmationNow});await app.open(fictionalInvoices[0].id);
+  for(const input of [{precision:'day',date:'2028-01-01'},{precision:'month',month:'2028-01'}]){
+   await submitPayment(app,input);assert.equal(app.pendingSaves.length,0);assert.equal(app.persisted.paymentConfirmations,undefined);
+   assert.match(app.elements.get('detail-body').innerHTML,language==='en'?/payment already happened/:/付款已發生/);
+   assert.equal(app.elements.get('confirmation-result').focused,true);
+  }
+ }
+});
+
+
+test('confirming a one-time, donation or unclassified payment does not promise subscription spending or an empty Payments destination',async()=>{
+ for(const category of ['One-time purchases','Donations','Unclassified'])for(const language of ['en','zh-TW']){
+  const invoice={...fictionalInvoices[0],category},app=await harness({events:[invoice],prefs:{language,view:'other',month:'all'},now:confirmationNow});await app.open(invoice.id);
+  assert.match(app.elements.get('detail-body').innerHTML,language==='en'?/does not establish a subscription/:/不代表已有訂閱/);
+  await submitPayment(app,{precision:'month',month:'2026-01'});await settleWrites(app);
+  assert.equal(app.persisted.paymentConfirmations[invoice.id].active,true);assert.equal(app.elements.get('confirm-view-payment'),undefined);
+  assert.doesNotMatch(app.elements.get('originals').textContent,/17\.00/);assert.match(app.elements.get('detail-body').innerHTML,language==='en'?/Confirmed by you/:/由你確認/);
+ }
+});
+
+test('ChatGPT retains its bundled OpenAI mark in both languages while permission-gated Claude retains initials',async()=>{
+ for(const language of ['en','zh-TW']){
+  const app=await harness({events:[syntheticReceipt('chatgpt-logo',{serviceKey:'chatgpt',service:'ChatGPT'}),syntheticReceipt('claude-logo',{serviceKey:'claude',service:'Claude'})],prefs:{language,view:'payments'}});
+  const rows=app.elements.get('list').innerHTML.split('</button>'),chatgpt=rows.find(row=>row.includes('data-record="chatgpt-logo"')),claude=rows.find(row=>row.includes('data-record="claude-logo"'));
+  assert.match(chatgpt,/<img src="data:image\/svg\+xml;base64,/);assert.match(claude,/<span>CL<\/span>/);assert.doesNotMatch(claude,/<img/);
+  assert.match(app.elements.get('brand-notice').textContent,/OpenAI Blossom/);
+ }
+});
+
+
+test('a rescan that reclassifies a confirmed invoice keeps its user confirmation, edit and undo history accessible',async()=>{
+ const runtime=createPaymentConfirmationRuntime(),invoice=fictionalInvoices[0];let state=runtime.set({events:[invoice],prefs:{language:'en',view:'other',month:'all'}},{eventId:invoice.id,precision:'month',month:'2026-01',amount:{currency:'EUR',minor:1700},expectedRevision:0},{now:confirmationNow});
+ state={...state,events:[{...invoice,kind:'one_time_purchase',payment:{currency:'EUR',minor:1700}}]};const app=await harness({initialState:state,now:confirmationNow});await app.open(invoice.id);
+ assert.match(app.elements.get('detail-body').innerHTML,/Confirmed by you/);assert.match(app.elements.get('detail-body').innerHTML,/does not establish a subscription/);assert.equal(app.elements.get('confirm-view-payment'),undefined);
+ await app.elements.get('confirm-edit').dispatch('click');await submitPayment(app,{precision:'day',date:'2026-01-19'});await settleWrites(app);assert.equal(app.persisted.paymentConfirmations[invoice.id].date,'2026-01-19');assert.equal(app.persisted.paymentConfirmations[invoice.id].source.kind,'invoice_recorded');
+ await app.elements.get('confirm-remove').dispatch('click');await settleWrites(app);assert.equal(app.persisted.paymentConfirmations[invoice.id].active,false);assert.ok(app.elements.get('confirm-undo'));
+ await app.elements.get('confirm-undo').dispatch('click');await settleWrites(app);assert.equal(app.persisted.paymentConfirmations[invoice.id].active,true);assert.match(app.elements.get('detail-body').innerHTML,/Confirmed by you/);assert.doesNotMatch(app.elements.get('originals').textContent,/17\.00/);
+});
+
+
+test('a missing local source never hides the saved user confirmation or its undo history and original message link',async()=>{
+ const runtime=createPaymentConfirmationRuntime(),invoice=fictionalInvoices[0];let state=runtime.set({events:[invoice],prefs:{language:'en',view:'payments',month:'all'}},{eventId:invoice.id,precision:'month',month:'2026-01',amount:{currency:'EUR',minor:1700},expectedRevision:0},{now:confirmationNow});
+ state={...state,events:[]};const app=await harness({initialState:state,now:confirmationNow});assert.match(app.elements.get('list').innerHTML,/Confirmed by you/);await app.open(invoice.id);
+ assert.match(app.elements.get('detail-body').innerHTML,/Confirmed by you/);assert.match(app.elements.get('detail-body').innerHTML,/original payment record is unavailable/);assert.match(app.elements.get('detail-body').innerHTML,new RegExp(invoice.messageId));assert.equal(app.elements.get('confirm-edit').disabled,true);
+ await app.elements.get('confirm-remove').dispatch('click');await settleWrites(app);assert.equal(app.persisted.paymentConfirmations[invoice.id].active,false);assert.ok(app.elements.get('confirm-undo'));assert.equal(app.elements.get('confirm-save').disabled,true);
+ await app.elements.get('confirm-undo').dispatch('click');await settleWrites(app);assert.equal(app.persisted.paymentConfirmations[invoice.id].active,true);assert.match(app.elements.get('detail-body').innerHTML,/Confirmed by you/);assert.equal(app.persisted.events.length,0);
 });

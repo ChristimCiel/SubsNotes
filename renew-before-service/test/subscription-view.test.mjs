@@ -5,6 +5,7 @@ import { createEvidenceRuntime } from '../src/evidence-runtime.mjs';
 import { createCashflowRuntime } from '../src/cashflow.mjs';
 import { createFxRuntime } from '../src/fx.mjs';
 import { createSubscriptionViewRuntime } from '../src/subscription-view.mjs';
+import { createI18nRuntime } from '../src/i18n.mjs';
 
 // All records, names and dates are fictional. No mailbox fixtures are used.
 const core = createEvidenceRuntime(value => value), cashflow = createCashflowRuntime(), fx = createFxRuntime(), view = createSubscriptionViewRuntime();
@@ -177,9 +178,9 @@ test('inline fragments reuse the same dated records and controls without a docum
   }
 });
 
-test('inline rendering remains escaped, read-only and self-contained when the factory is embedded in a host', () => {
+test('inline rendering remains escaped and read-only when the shared factories are embedded in a host', () => {
   const snapshot = build([receipt('inline-hostile',{service:'<script>alert(1)</script>',plan:'<img src=x onerror=alert(1)>'})]);
-  const embedded = vm.runInNewContext('('+createSubscriptionViewRuntime.toString()+')()');
+  const embedded = vm.runInNewContext(createI18nRuntime.toString()+';('+createSubscriptionViewRuntime.toString()+')()');
   const html = embedded.renderInlineHTML(snapshot);
   assert.match(html,/&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
   assert.doesNotMatch(html,/<img src=x|<script>alert\(1\)/);

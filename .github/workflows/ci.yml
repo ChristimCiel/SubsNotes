@@ -21,7 +21,8 @@ jobs:
       - run: npm test
       - run: npm run check:demo
       - run: npm run sample
-      - run: npm run package:claude-web
+      - run: npm run package:confirmation-demo
+      - run: node --check renew-before-demo/dist/confirmations.js
       - run: npm run package:skill
   macos:
     runs-on: macos-14

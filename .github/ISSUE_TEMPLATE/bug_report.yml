@@ -1,0 +1,61 @@
+name: Bug report / 問題回報
+description: Report current behavior with fictional examples / 以合成範例回報目前行為
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please use fictional examples. Never attach real bills, mailbox exports, private links, account details, credentials or financial screenshots.
+        請使用合成範例，不要附真實帳單、信箱匯出、私人連結、帳戶資料、憑證或財務截圖。
+        For security issues, follow SECURITY.md and request a private route / 安全問題請依 SECURITY.zh-TW.md 使用私人管道。
+  - type: input
+    id: version
+    attributes:
+      label: Version / 版本
+      placeholder: Release tag or commit / Release 標籤或 commit
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where did this happen? / 發生在哪裡？
+      options:
+        - Fictional browser demo / 合成資料網頁示範
+        - Private Claude dashboard / 私人 Claude 儀表板
+        - Local report or reader / 本機報告或 Reader
+        - macOS source build / macOS 原始碼編譯
+        - Other / 其他
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Language and host/browser / 語言與平台、瀏覽器
+      description: No account identifiers or private URLs / 不要填帳戶識別碼或私人網址
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps / 重現步驟
+      description: Use fictional services, dates and amounts / 使用虛構的服務、日期與金額
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior / 預期行為
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior / 實際行為
+      description: Redact sensitive values in error text; use only synthetic screenshots / 錯誤文字先去除敏感值，截圖只使用合成資料
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check / 隱私確認
+      options:
+        - label: This report contains no personal billing data, private links or credentials / 本回報不含個人帳務資料、私人連結或憑證
+          required: true

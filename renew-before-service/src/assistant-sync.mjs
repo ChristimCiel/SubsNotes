@@ -5,8 +5,8 @@ export async function prepareAssistantSync({documents,observations=[],runId,asOf
   if(!Array.isArray(documents)||!Array.isArray(observations)||!runId||!Number.isFinite(Date.parse(asOf)))throw new Error('Observed documents, a fresh run identity and a processing time are required');
   if(!scan||typeof scan!=='object'||Array.isArray(scan)||Object.keys(scan).some(key=>!['since','until','includeSpamTrash','recentOnly','maxReads'].includes(key)))throw new Error('Unsupported discovery options');
   const canonical=value=>JSON.stringify(value,(_,x)=>x&&typeof x==='object'&&!Array.isArray(x)?Object.fromEntries(Object.keys(x).sort().map(k=>[k,x[k]])):x);
-  const records=new Map(documents.filter(d=>d.id==='subsnotes-state-v1'||/^(?:events|checkpoints)-[a-f0-9]{64}$/.test(d.id)).map(d=>[d.id,structuredClone(d.data)]));
-  const writes=[],allowed=id=>id==='subsnotes-state-v1'||/^(?:events|checkpoints)-[a-f0-9]{64}$/.test(id);
+  const records=new Map(documents.filter(d=>d.id==='subsnotes-state-v1'||/^(?:events|checkpoints|confirmations)-[a-f0-9]{64}$/.test(d.id)).map(d=>[d.id,structuredClone(d.data)]));
+  const writes=[],allowed=id=>id==='subsnotes-state-v1'||/^(?:events|checkpoints|confirmations)-[a-f0-9]{64}$/.test(id);
   const db={collection(path){if(path!=='data/users/current-viewer')throw new Error('Unexpected storage namespace');return {doc(id){if(!allowed(id))throw new Error('Unexpected record path');return {
     get:async()=>({exists:records.has(id),data:()=>structuredClone(records.get(id)),metadata:{hasPendingWrites:false}}),
     set:async data=>{records.set(id,structuredClone(data));writes.push({id,data:structuredClone(data)});}

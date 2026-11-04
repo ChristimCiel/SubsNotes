@@ -22,7 +22,7 @@ test('private view CLI preserves exact shared totals, bilingual controls and res
     const input=join(dir,'state.json'),output=join(dir,'view.html'),snapshot=join(dir,'view.json');
     await writeFile(input,JSON.stringify(state),{mode:0o600});
     const {stdout}=await run(process.execPath,[cli,'--state',input,'--output',output,'--snapshot-json',snapshot,'--language','zh','--as-of','2026-05-01T00:00:00Z']);
-    assert.match(stdout,/No ledger was changed/);
+    assert.match(stdout,/未更改帳本/);
     const view=JSON.parse(await readFile(snapshot,'utf8'));
     assert.deepEqual(view.totals.paidMinorByCurrency,{USD:2000});
     assert.equal(view.ledgerRevision,'synthetic-r1');
@@ -38,6 +38,9 @@ test('private view CLI preserves exact shared totals, bilingual controls and res
     const throughAlias=await run(process.execPath,[alias,'--state',input,'--output',join(dir,'alias.html')]);
     assert.match(throughAlias.stdout,/Created a private read-only view/);
     assert.match(await readFile(join(dir,'alias.html'),'utf8'),/Example Tool/);
+    const canonical=await run(process.execPath,[cli,'--state',input,'--output',join(dir,'zh-tw.html'),'--language','zh-TW']);
+    assert.match(canonical.stdout,/未更改帳本/);
+    assert.match(await readFile(join(dir,'zh-tw.html'),'utf8'),/私人|已記錄|訂閱/);
     assert.deepEqual(JSON.parse(await readFile(input,'utf8')),state);
   } finally {await rm(dir,{recursive:true,force:true});}
 });

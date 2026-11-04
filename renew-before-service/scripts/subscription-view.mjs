@@ -9,6 +9,7 @@ import { createFxRuntime } from '../src/fx.mjs';
 import { createSubscriptionViewRuntime } from '../src/subscription-view.mjs';
 import { createServiceBrandsRuntime } from '../src/service-brands.mjs';
 import { assertPrivateDirectory } from '../src/private-directory.mjs';
+import { createI18nRuntime } from '../src/i18n.mjs';
 
 // The standalone skill bundle embeds this function and the same factories.
 // No network, credentials or ledger writes are involved in rendering a view.
@@ -18,11 +19,12 @@ export async function runSubscriptionView(args, api) {
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
     if (flag === '--help') return { help: true };
-    if (!flag.startsWith('--') || !names.has(flag.slice(2)) || !args[i+1] || args[i+1].startsWith('--') || Object.hasOwn(options,flag.slice(2))) throw new Error('Use --state FILE --output FILE [--language en|zh] [--month YYYY-MM] [--currency ISO] [--surface standalone|inline] [--logo-cache PRIVATE_DIRECTORY] [--snapshot-json FILE]');
+    if (!flag.startsWith('--') || !names.has(flag.slice(2)) || !args[i+1] || args[i+1].startsWith('--') || Object.hasOwn(options,flag.slice(2))) throw new Error('Use --state FILE --output FILE [--language en|zh-TW] [--month YYYY-MM] [--currency ISO] [--surface standalone|inline] [--logo-cache PRIVATE_DIRECTORY] [--snapshot-json FILE]');
     options[flag.slice(2)] = args[++i];
   }
   if (!options.state || !options.output) throw new Error('--state and --output are required');
-  if (options.language && !['en','zh'].includes(options.language)) throw new Error('Use language en or zh');
+  if (options.language && !['en','zh-TW','zh'].includes(options.language)) throw new Error('Use language en or zh-TW (legacy zh is accepted)');
+  if (options.language === 'zh') options.language = 'zh-TW';
   if (options.surface && !['standalone','inline'].includes(options.surface)) throw new Error('Use surface standalone or inline');
   if (options.currency && !Intl.supportedValuesOf('currency').includes(options.currency)) throw new Error('Unsupported display currency');
   const { fs, paths, privateDirectory, contracts, core, cashflow, fx, view, hash } = api;
@@ -66,6 +68,7 @@ export async function runSubscriptionView(args, api) {
 }
 
 export async function main(args = process.argv.slice(2)) {
+  const i18n = createI18nRuntime(), language = i18n.normalizeLanguage(args[args.indexOf('--language')+1]);
   const contracts = createLedgerContracts();
   const hash = value => createHash('sha256').update(value).digest('hex');
   const result = await runSubscriptionView(args,{
@@ -78,11 +81,11 @@ export async function main(args = process.argv.slice(2)) {
       return createSubscriptionViewRuntime({brands});
     }
   });
-  if (result.help) console.log('Render a private, dated read-only view: --state FILE --output FILE [--language en|zh] [--month YYYY-MM] [--currency ISO] [--surface standalone|inline] [--logo-cache PRIVATE_DIRECTORY] [--snapshot-json FILE]. Inline output is a fragment for a compatible sandboxed host, not a standalone page or an authorization grant. Optional artwork is read locally from a separately prepared private public-catalog cache. No network calls. A raw ledger must come from actual host reads; validation does not authenticate a source. Portable imports require source rechecks. Existing output files are never overwritten.');
-  else console.log(`Created a private read-only view with ${result.rows} service rows.${result.imported ? ' Imported evidence requires source rechecks.' : ''} No ledger was changed.`);
+  if (result.help) console.log(i18n.t('cliHelp',language));
+  else console.log(i18n.t('cliCreated',language,{rows:result.rows})+(result.imported?' '+i18n.t('cliImported',language):''));
 }
 
 const invokedPath = process.argv[1] ? await realpath(process.argv[1]).catch(()=>null) : null;
 if (invokedPath && import.meta.url === pathToFileURL(invokedPath).href) {
-  main().catch(error=>{console.error(error.code ? 'Private file access failed ('+String(error.code).replace(/[^A-Z0-9_]/g,'')+')' : error.message);process.exitCode=1;});
+  main().catch(error=>{const i18n=createI18nRuntime(),language=i18n.normalizeLanguage(process.argv[process.argv.indexOf('--language')+1]);console.error(error.code ? i18n.t('cliFileError',language,{code:String(error.code).replace(/[^A-Z0-9_]/g,'')}) : language==='en'?error.message:i18n.t('cliError',language));process.exitCode=1;});
 }

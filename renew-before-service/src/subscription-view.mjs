@@ -1,6 +1,8 @@
-// Self-contained for the same read view in Node, Artifacts and host-rendered HTML.
+import {createI18nRuntime} from './i18n.mjs';
+// Shared read view in Node, Artifacts and host-rendered HTML.
 // It consumes the receipt and cashflow runtimes; it never maintains another ledger.
 export function createSubscriptionViewRuntime({ brands = null } = {}) {
+  const sharedI18n=createI18nRuntime();
   const version = 1;
   const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
   const text = (value, max = 120) => typeof value === 'string' ? value.replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, max) : null;
@@ -47,7 +49,7 @@ export function createSubscriptionViewRuntime({ brands = null } = {}) {
     if (!state || !Array.isArray(state.events) || !core?.projectEvidence || !cashflow?.summarize || !fx?.convertTotals) throw new Error('A saved ledger and the shared receipt, cashflow and FX runtimes are required');
     const generatedAt = new Date(asOf).toISOString();
     const projection = core.projectEvidence(state.events, { asOf:generatedAt, trustConnectorReads:true });
-    const fiscal = cashflow.summarize(projection, { month, trustConnectorReads:true });
+    const fiscal = cashflow.summarize(projection, { month, trustConnectorReads:true, paymentConfirmations:state.paymentConfirmations });
     const totals = values => Object.fromEntries(Object.entries(values).filter(([code,minor]) => supported.has(code) && Number.isSafeInteger(minor) && minor >= 0));
     let converted = null;
     if (currency && supported.has(currency)) {
@@ -60,7 +62,7 @@ export function createSubscriptionViewRuntime({ brands = null } = {}) {
       const providerKey = sub.providerServiceKey || sub.serviceKey, accountCount = providerCounts.get(providerKey);
       const accountOrdinal = (providerOrdinals.get(providerKey) || 0)+1; providerOrdinals.set(providerKey,accountOrdinal);
       const events = state.events.filter(event => sub.evidenceIds.includes(event.id));
-      const scoped = cashflow.summarize({ payments:projection.payments.filter(event => sub.evidenceIds.includes(event.id)), refunds:projection.refunds.filter(event => sub.evidenceIds.includes(event.id)) }, { month, trustConnectorReads:true });
+      const scoped = cashflow.summarize({ payments:projection.payments.filter(event => sub.evidenceIds.includes(event.id)), refunds:projection.refunds.filter(event => sub.evidenceIds.includes(event.id)), invoices:projection.invoices.filter(event=>sub.evidenceIds.includes(event.id)) }, { month, trustConnectorReads:true,paymentConfirmations:state.paymentConfirmations,confirmationEventIds:sub.evidenceIds });
       const primary = amount(sub.nextCharge) || amount(sub.lastPayment) || amount(sub.recurringRate) || amount(sub.lastInvoice);
       const amountBasis = sub.nextCharge ? 'upcoming' : sub.lastPayment ? 'paid' : sub.recurringRate ? 'rate' : sub.lastInvoice ? 'invoice' : null;
       const nextAt = instant(sub.nextBillingAt) || day(sub.nextBilling);
@@ -82,7 +84,7 @@ export function createSubscriptionViewRuntime({ brands = null } = {}) {
         lastSourceAt:dates(events.map(event => instant(event.receivedAt))).at(-1) || null,
         lastReadAt:dates(events.map(event => instant(event.sourceReadAt))).at(-1) || null,
         receiptCheckedAt:dates(events.map(event => instant(event.receiptVerification?.checkedAt))).at(-1) || null,
-        paidMinorByCurrency:totals(scoped.paidMinorByCurrency), excludedPayments:scoped.excluded.filter(row => !row.refund).length,
+        paidMinorByCurrency:totals(scoped.paidMinorByCurrency), userConfirmedPaidMinorByCurrency:totals(scoped.userConfirmedPaidMinorByCurrency),userConfirmedCount:scoped.userConfirmedCount,monthPrecisionPaymentCount:scoped.monthPrecisionPaymentCount,excludedPayments:scoped.excluded.filter(row => !row.refund).length,
         reviewOn:day(state.prefs?.reviews?.[sub.serviceKey]), warningCount:sub.warnings?.length || 0, warningCodes:Object.keys(warningMessages).filter(key=>sub.warnings?.includes(warningMessages[key])), nextAction, evidenceCount:events.length, sources };
     });
     return { kind:'subsnotes.read-view', version, mode:'read-only', generatedAt,
@@ -90,11 +92,11 @@ export function createSubscriptionViewRuntime({ brands = null } = {}) {
       coverage:{ pending:Boolean(state.pending), completedAt:instant(state.lastCompletedAt), messageCount:Array.isArray(state.scannedIds) ? state.scannedIds.length : null, exhaustive:false,
         messagesNeedingReview:Number.isSafeInteger(state.processingSummary?.needsReview) && state.processingSummary.needsReview >= 0 ? state.processingSummary.needsReview : null,
         heldEvidenceCount:projection.heldEvidence?.length || 0 },
-      totals:{ paidMinorByCurrency:totals(fiscal.paidMinorByCurrency), providerRefundMinorByCurrency:totals(fiscal.providerRefundMinorByCurrency), excludedPayments:fiscal.excluded.filter(row => !row.refund).length, converted, basis:fiscal.basis, bankReconciled:false }, rows };
+      totals:{ paidMinorByCurrency:totals(fiscal.paidMinorByCurrency), sourcePaidMinorByCurrency:totals(fiscal.sourcePaidMinorByCurrency),userConfirmedPaidMinorByCurrency:totals(fiscal.userConfirmedPaidMinorByCurrency),userConfirmedCount:fiscal.userConfirmedCount,monthPrecisionPaymentCount:fiscal.monthPrecisionPaymentCount,confirmationConflictCount:fiscal.confirmationConflicts.length, providerRefundMinorByCurrency:totals(fiscal.providerRefundMinorByCurrency), excludedPayments:fiscal.excluded.filter(row => !row.refund).length, converted, basis:fiscal.basis, bankReconciled:false }, rows };
   }
   function renderHTML(snapshot, { language = 'en', synthetic = false } = {}) {
     if (!snapshot || snapshot.kind !== 'subsnotes.read-view' || snapshot.version !== version || snapshot.mode !== 'read-only' || !Array.isArray(snapshot.rows)) throw new Error('A supported SubsNotes read-only snapshot is required');
-    const lang = language === 'zh' ? 'zh' : 'en', w = words[lang];
+    const lang = ['zh','zh-TW'].includes(language) ? 'zh' : 'en', w = words[lang];
     const localized = (en, zh, tag = 'span', attrs = '') => '<'+tag+' data-en="'+escape(en)+'" data-zh="'+escape(zh)+'"'+attrs+'>'+escape(lang === 'zh' ? zh : en)+'</'+tag+'>';
     const label = (key, tag = 'span', attrs = '') => localized(words.en[key], words.zh[key], tag, attrs);
     const formatMoney = (value, language) => {
@@ -147,6 +149,8 @@ export function createSubscriptionViewRuntime({ brands = null } = {}) {
     const displayTotal = converted?.minor != null ? (converted.complete ? '' : label('partial')+' · ')+(converted.rateDates?.length ? '≈ ' : '')+money(converted,'span') : unconvertedTotal;
     const totalNotes = '<details class="info-popover" data-popover><summary>'+label('totalHelp')+' <span aria-hidden="true">ⓘ</span></summary><div class="popover-body"><div class="popover-heading">'+label('calculation','h2')+label('close','button',' type="button" data-close-popover')+'</div>'
       +(originals?'<p class="originals">'+originals+'</p>':label('noPayments','p'))+(refundList?'<p>'+label('refunds')+': '+refundList+'</p>':'')+label('basis','p')
+      +(snapshot.totals?.userConfirmedCount?localized(sharedI18n.t('confirmationReadNote','en'),sharedI18n.t('confirmationReadNote','zh-TW'),'p'):'')
+      +(snapshot.totals?.monthPrecisionPaymentCount?localized(sharedI18n.t('confirmationMonthReadNote','en'),sharedI18n.t('confirmationMonthReadNote','zh-TW'),'p'):'')
       +(snapshot.totals?.excludedPayments?'<p>'+escape(snapshot.totals.excludedPayments)+' '+label('exclusions')+'</p>':'')
       +(converted?.rateDates?.length?'<p>'+label('approximate')+' · '+label('rates')+': '+converted.rateDates.map(escape).join(' / ')+(converted.stale?' · '+label('staleRates'):'')+'</p>':'')
       +(converted?.missingCurrencies?.length?label('missingRates','p'):'')+'</div></details>';
