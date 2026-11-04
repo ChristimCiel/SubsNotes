@@ -39,7 +39,7 @@ test('currencies, refunds, pending refunds and unknown sources stay separate', (
 });
 
 test('legacy date fallbacks and invalid or overflowing amounts cannot inflate a monthly total', () => {
-  const e = { id: 'legacy', authenticated: true, payment: { currency: 'USD', minor: 40 }, paymentDay: '2026-07-01' };
+  const e = { id: 'legacy', kind:'payment_succeeded', authenticated: true, payment: { currency: 'USD', minor: 40 }, paymentDay: '2026-07-01' };
   assert.equal(summarizeCashflow({ payments: [e] }).unallocatedCount, 1);
   assert.throws(() => summarizeCashflow({}, { month: '2026-13' }), /calendar month/);
   assert.throws(() => summarizeCashflow({ payments: [
@@ -49,10 +49,46 @@ test('legacy date fallbacks and invalid or overflowing amounts cannot inflate a 
 });
 
 test('uncertain receipts from another known month do not make the selected month incomplete',()=>{
-  const event=(id,date,currency)=>({id,authenticated:true,paymentDay:date,paymentDateBasis:'explicit',payment:{currency,minor:1200}});
+  const event=(id,date,currency)=>({id,kind:'payment_succeeded',authenticated:true,paymentDay:date,paymentDateBasis:'explicit',payment:{currency,minor:1200}});
   const snapshot={payments:[event('synthetic-july','2026-07-31','USD'),event('synthetic-august','2026-08-02',null)]};
   const july=summarizeCashflow(snapshot,{month:'2026-07'});
   assert.deepEqual(july.paidMinorByCurrency,{USD:1200});assert.equal(july.excluded.length,0);
   assert.deepEqual(july.months,['2026-08','2026-07']);
   assert.equal(summarizeCashflow(snapshot,{month:'2026-08'}).excluded.length,1);
+});
+
+test('invoices, expected renewals and held receipts cannot become expenses through a misplaced payment array',()=>{
+  const paid={id:'synthetic-paid',kind:'payment_succeeded',authenticated:true,paymentDay:'2026-07-31',paymentDateBasis:'explicit',payment:{currency:'USD',minor:2400}};
+  const result=summarizeCashflow({payments:[paid,
+    {...paid,id:'synthetic-invoice',kind:'invoice_recorded',paymentDay:'2026-08-01'},
+    {...paid,id:'synthetic-renewal',kind:'renewal_notice',paymentDay:'2026-09-01'},
+    {...paid,id:'synthetic-candidate',candidateStatus:'needs_review'},
+    {...paid,id:'synthetic-import',importStatus:'needs_source_recheck'},
+    {...paid,id:'synthetic-source-conflict',sourceProcessingConflict:true}
+  ]});
+  assert.deepEqual(result.paidMinorByCurrency,{USD:2400});
+  assert.deepEqual(result.months,['2026-07']);
+  assert.equal(result.included.length,1);
+  assert.deepEqual(result.excluded.map(row=>row.reason),['payment_not_recorded','payment_not_recorded','held_for_review','held_for_review','held_for_review']);
+});
+
+test('source authority requires real booleans or an actual dated connector read',()=>{
+  const paid={id:'synthetic-source',kind:'payment_succeeded',authenticated:true,paymentDay:'2026-07-31',paymentDateBasis:'explicit',payment:{currency:'USD',minor:1200}};
+  const result=summarizeCashflow({payments:[
+    {...paid,authenticated:'false'},
+    {...paid,id:'synthetic-flag',authenticated:false,userVerified:'true'},
+    {...paid,id:'synthetic-invalid-read',authenticated:false,sourceFormat:'claude_plaintext',sourceReadAt:'not-a-date'},
+    {...paid,id:'synthetic-connector',authenticated:false,sourceFormat:'claude_plaintext',sourceReadAt:'2026-08-01T10:00:00Z'}
+  ]},{trustConnectorReads:true});
+  assert.deepEqual(result.paidMinorByCurrency,{USD:1200});
+  assert.equal(result.excluded.length,3);
+});
+
+test('billing dates remain receipt calendar days across year boundaries and leap days',()=>{
+  const paid=(id,date,minor)=>({id,kind:'payment_succeeded',authenticated:true,paymentDay:date,paymentDateBasis:'explicit',payment:{currency:'USD',minor},receivedAt:'2026-01-01T00:30:00+14:00'});
+  const snapshot={payments:[paid('synthetic-year-end','2025-12-31',9900),paid('synthetic-new-year','2026-01-01',100),paid('synthetic-leap','2024-02-29',200),paid('synthetic-invalid-leap','2025-02-29',300)]};
+  assert.deepEqual(summarizeCashflow(snapshot,{month:'2025-12'}).paidMinorByCurrency,{USD:9900});
+  assert.deepEqual(summarizeCashflow(snapshot,{month:'2026-01'}).paidMinorByCurrency,{USD:100});
+  assert.deepEqual(summarizeCashflow(snapshot,{month:'2024-02'}).paidMinorByCurrency,{USD:200});
+  assert.equal(summarizeCashflow(snapshot).unallocatedCount,1);
 });

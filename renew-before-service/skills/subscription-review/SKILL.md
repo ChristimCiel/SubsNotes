@@ -85,3 +85,5 @@ For subsequent connector refreshes, use the incremental workflow instead of resc
 ```
 
 Set `backgroundUpdatesConfigured` to true only during a run of an actually activated schedule, never for a proposed schedule or a manual test. The finish step excludes overlapping commits, rejects stale baselines, rebuilds the saved report and advances the checkpoint only after writes succeed. Per-file atomic replacement is not a full database transaction; a failed write must still be retried. Reload an open browser report to read the new saved version; the MCP reader reads the saved files on each call.
+
+For expense questions, use the shared dated cashflow rules: a receipt or invoice date does not establish the actual payment day. Keep annual payments whole in the payment month. Do not include one-time purchases, donations, invoices or unresolved payments in subscription spending. A source with zero parsed events still needs semantic review; use the shared explicit non-billing review helper only after reading the complete original and verifying that it contains no billing or subscription event. Preserve reviewed fields and original email links during updates.

@@ -16,6 +16,8 @@ function parseDay(value) {
     const day = iso[0];
     return !Number.isNaN(Date.parse(day)) && new Date(day).toISOString().slice(0, 10) === day ? day : null;
   }
+  const yearFirst = value.match(/\b(20\d{2})\/(\d{1,2})\/(\d{1,2})\b/);
+  if (yearFirst) return parseDay(`${yearFirst[1]}-${yearFirst[2].padStart(2,'0')}-${yearFirst[3].padStart(2,'0')}`);
   const named = value.match(/\b([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(20\d{2})\b/);
   if (named) {
     const month = MONTHS[named[1].slice(0, 3).toLowerCase()];
@@ -93,7 +95,7 @@ function issuer(message) {
   const names = [
     ['anthropic.com', 'claude', 'Claude'], ['openai.com', 'chatgpt', 'ChatGPT'],
     ['suno.com', 'suno', 'Suno'], ['meshy.ai', 'meshy', 'Meshy'],
-    ['vocalimage.net', 'vocal-image', 'Vocal Image'], ['personalityhub.ai', 'animaltypes', 'AnimalTypes'],
+    ['vocalimage.net', 'vocal-image', 'Vocal Image'], ['personalityhub.ai', 'personalityhub', 'PersonalityHub'],
     ['mobbin.com', 'mobbin', 'Mobbin'], ['capcut.com', 'capcut', 'CapCut'],
     ['youtube.com', 'youtube-premium', 'YouTube Premium'], ['github.com', 'github', 'GitHub'],
     ['replit.com', 'replit', 'Replit'], ['notion.so', 'notion', 'Notion'], ['figma.com', 'figma', 'Figma'],
@@ -111,6 +113,13 @@ function issuer(message) {
     if (/\bn8n\b|Cloud Start Yearly/.test(subject + text)) return { key: 'n8n', name: 'n8n', category: 'Automation', domain };
   }
   if (domain === 'stripe.com') {
+    const billingText = subject + '\n' + text;
+    // Merchant notifications about a customer's payment are not the mailbox
+    // owner's outgoing subscriptions.
+    if (/\byour customer(?:s|['’]s)?\b/i.test(billingText)) return null;
+    if (/\bwe attempted to charge your\b/i.test(text) && /\bfor your Magic\s*Patterns subscription\b/i.test(text)) {
+      return {key:'magic-patterns',name:'Magic Patterns',category:'Software',domain};
+    }
     for (const [pattern, key, name] of [
       [/receipt from Meshy/i, 'meshy', 'Meshy'], [/receipt from X\b/i, 'x-premium', 'X Premium'],
       [/Replit/i, 'replit', 'Replit'], [/Linear Orbit/i, 'linear', 'Linear'], [/Assembla/i, 'assembla', 'Assembla'],
@@ -243,8 +252,16 @@ function extractEvidence(input) {
     const renewal = /auto-renew off/i.test(text) ? 'off' : /auto-renew on/i.test(text) ? 'on' : 'unknown';
     return [event('renewal_notice', text.match(/-\s+[^\n]+/)?.[0] || subject, { accessEnds: end, renewal, nextCharge: null })];
   }
-  const hint = text.match(/(?:currency(?: code)?\s*[:：]\s*|\b)(USD|TWD|EUR|GBP|CAD|AUD|JPY)\b/)?.[1] ?? null;
+  const currencyCodePattern = ISO_CURRENCIES.join('|');
+  const labelledCurrencies = new Set([...text.matchAll(new RegExp('\\bcurrency(?: code)?\\s*[:：]\\s*(' + currencyCodePattern + ')\\b','gi'))].map(match=>match[1].toUpperCase()));
+  const mentionedCurrencies = new Set([...text.matchAll(new RegExp('\\b(' + currencyCodePattern + ')\\b','g'))].map(match=>match[1]));
+  // A comparison price or another currency in the footer cannot silently
+  // establish the currency of a bare dollar amount.
+  const hint = labelledCurrencies.size === 1 ? [...labelledCurrencies][0]
+    : labelledCurrencies.size ? null : mentionedCurrencies.size === 1 ? [...mentionedCurrencies][0] : null;
+  const completedChinesePayment = /本次付款已完成/.test(text);
   let paid = afterMoney(text, 'Amount paid\\*?|Total paid|實付金額', hint)
+    ?? (completedChinesePayment ? afterMoney(text,'付款金額',hint) : null)
     ?? (/payment was successful/i.test(subject) ? money(subject.match(/(\$[\d,.]+)/)?.[1]) : null)
     ?? (/(?:receipt|收據)/i.test(subject) ? money(text.match(new RegExp('Receipt from[^\n]{0,100}?(' + MONEY_PATTERN + ')\\s+Paid', 'i'))?.[1], hint) : null);
   const newsletterReceipt=service.key==='lennys-newsletter'&&/This is your receipt for invoice\s*#/i.test(text);
@@ -270,11 +287,14 @@ function extractEvidence(input) {
   const nextAmount = text.match(new RegExp('will renew at\\s*(' + MONEY_PATTERN + ')','i'))?.[1];
   const cancelBy = parseDay(text.match(/unless you cancel by\s+([^.!\n]{6,40})/i)?.[1]);
   const reference = text.match(/Invoice (?:number|#)\s*([A-Z0-9-]+)/i)?.[1] ?? text.match(/Receipt (?:number|#)\s*([A-Z0-9-]+)/i)?.[1];
-  const paymentDay = parseDay(text.match(/\bPaid\s+([A-Za-z]+\s+\d{1,2},?\s+20\d{2}|20\d{2}-\d{2}-\d{2})/)?.[1] || (newsletterReceipt?text.match(/This is your receipt for invoice\s*#[A-Z0-9-]+\s+on\s+([^.!\n]{6,40})/i)?.[1]:null));
+  const paymentDay = parseDay(text.match(/\bPaid\s+([A-Za-z]+\s+\d{1,2},?\s+20\d{2}|20\d{2}-\d{2}-\d{2})/)?.[1]
+    || (completedChinesePayment?text.match(/付款時間\s*[:：]?\s*(20\d{2}\/\d{1,2}\/\d{1,2})/)?.[1]:null));
+  const purchasedAccessEnds = completedChinesePayment ? parseDay(text.match(/權益到期\s*[:：]?\s*(20\d{2}\/\d{1,2}\/\d{1,2})/)?.[1]) : null;
   const events = [];
   if (paid) events.push(event(explicitlyRecurring ? 'payment_succeeded' : 'unclassified_purchase', `Amount paid ${paid.source}${period ? ` · ${period.start}–${period.end}` : ''}`, {
     payment: paid, paymentDay, paymentDateBasis: paymentDay ? 'explicit' : 'unknown',
     reference, period, plan, recurringRate, cadence: annual ? 'annual' : monthly ? 'monthly' : null,
+    ...(purchasedAccessEnds ? {accessEnds:purchasedAccessEnds} : {}),
     hasAdjustments: /Unused time|prorat|discount|50%|50 Off|credit|折抵/i.test(text), currencyAmbiguous: !paid.currency
   }));
   if (explicitlyRecurring && (nextBilling || cancelBy || /subscription (?:is )?confirmed|subscription confirmation|Your subscription to|signing up for your/i.test(subject + text))) {
@@ -308,24 +328,54 @@ function projectEvidence(events, { asOf = new Date().toISOString(), coverage = n
   // an invoice ID alone cannot distinguish two partial refunds or line items.
   const scope = event => event.accountRef ? event.serviceKey + '|account:' + encodeURIComponent(event.accountRef) : event.serviceKey;
   const transactionKey = (event, refund = false) => scope(event) + '|' + (refund && event.refundRef ? 'refund:' + encodeURIComponent(event.refundRef) : event.transactionRef ? 'transaction:' + encodeURIComponent(event.transactionRef) : event.reference || event.messageId) + (event.lineItemRef ? '|line:' + encodeURIComponent(event.lineItemRef) : '');
+  const mergeTransaction = (previous, incoming, field, dateField, basisField) => {
+    if (!previous) return incoming;
+    const oldAmount = previous[field], nextAmount = incoming[field];
+    const dated = event => (dateField === 'invoiceDay' || event[basisField] === 'explicit') && parseDay(event[dateField]) === event[dateField] && !!event[dateField];
+    const conflict = previous.conflict || incoming.conflict
+      || Number.isSafeInteger(oldAmount?.minor) && Number.isSafeInteger(nextAmount?.minor) && oldAmount.minor !== nextAmount.minor
+      || oldAmount?.currency && nextAmount?.currency && oldAmount.currency !== nextAmount.currency
+      || dated(previous) && dated(incoming) && previous[dateField] !== incoming[dateField];
+    // Copies of the same transaction may fill a missing field, but cannot vote
+    // away a contradictory amount, currency or explicit payment date.
+    const quality = event => (dated(event) ? 4 : 0) + (event[field]?.currency ? 2 : 0) + (Number.isSafeInteger(event[field]?.minor) ? 1 : 0);
+    const selected = quality(incoming) > quality(previous) ? incoming : previous;
+    const record = { ...selected, duplicateEvidenceIds: [...new Set([previous.id, ...(previous.duplicateEvidenceIds || []), incoming.id, ...(incoming.duplicateEvidenceIds || [])])].filter(id => id !== selected.id) };
+    if (oldAmount || nextAmount) record[field] = {
+      ...(oldAmount || {}), ...(nextAmount || {}),
+      ...(Number.isSafeInteger(oldAmount?.minor) && !Number.isSafeInteger(nextAmount?.minor) ? { minor: oldAmount.minor } : {}),
+      ...(oldAmount?.currency && !nextAmount?.currency ? { currency: oldAmount.currency } : {})
+    };
+    const explicit = dated(selected) ? selected : dated(previous) ? previous : dated(incoming) ? incoming : null;
+    if (explicit) { record[dateField] = explicit[dateField]; record[basisField] = 'explicit'; }
+    if (conflict) record.conflict = true;
+    return record;
+  };
   const groups = new Map();
   const payments = new Map();
   const oneTime = new Map();
+  const otherRecurringPayments = new Map();
   const unclassifiedPurchases = [];
   const heldEvidence = events.filter(event=>conflicts.has(event.id)).map(event=>({...event,holdReason:'conflicting_event_identity'}));
   const refunds = new Map();
   for (const event of ordered) {
-    if (event.sourceProcessingConflict === true || event.candidateStatus === 'needs_review' || event.importStatus === 'needs_source_recheck' || !event.authenticated && !event.userVerified && !(trustConnectorReads && event.sourceFormat === 'claude_plaintext' && event.sourceReadAt)) { heldEvidence.push(event); continue; }
+    if (event.sourceProcessingConflict === true || event.candidateStatus === 'needs_review' || event.importStatus === 'needs_source_recheck' || event.authenticated !== true && event.userVerified !== true && !(trustConnectorReads === true && event.sourceFormat === 'claude_plaintext' && typeof event.sourceReadAt === 'string' && Number.isFinite(Date.parse(event.sourceReadAt)))) { heldEvidence.push(event); continue; }
     if (event.kind === 'unclassified_purchase') { unclassifiedPurchases.push(event); continue; }
     if (event.category === 'Unclassified' && ['refund_recorded', 'refund_pending'].includes(event.kind)) {
       refunds.set(transactionKey(event,true), event);
       unclassifiedPurchases.push(event);
       continue;
     }
-    if (['one_time_purchase', 'wallet_top_up'].includes(event.kind)) {
-      const key = transactionKey({...event,messageId:event.id});
+    if (event.kind === 'payment_succeeded' && event.category === 'Donations') {
+      const key = transactionKey(event);
+      otherRecurringPayments.set(key,mergeTransaction(otherRecurringPayments.get(key),event,'payment','paymentDay','paymentDateBasis'));
+      continue;
+    }
+    if (['one_time_purchase', 'wallet_top_up'].includes(event.kind) || event.kind === 'invoice_recorded' && event.category === 'One-time purchases') {
+      const invoice = event.kind === 'invoice_recorded';
+      const key = (invoice ? 'invoice|' : '') + transactionKey({...event,messageId:event.id});
       const previous = oneTime.get(key);
-      oneTime.set(key, previous ? { ...previous, duplicateEvidenceIds: [...(previous.duplicateEvidenceIds || []), event.id] } : event);
+      oneTime.set(key, mergeTransaction(previous, event, invoice?'invoiceAmount':'payment', invoice?'invoiceDay':'paymentDay', invoice?'invoiceDateBasis':'paymentDateBasis'));
       continue;
     }
     const groupKey = scope(event);
@@ -342,8 +392,10 @@ function projectEvidence(events, { asOf = new Date().toISOString(), coverage = n
     } else if (event.kind === 'refund_recorded' || event.kind === 'refund_pending') {
       const key = transactionKey(event,true);
       const existing = refunds.get(key);
-      if(existing?.kind==='refund_recorded'&&event.kind==='refund_recorded'&&existing.refund&&event.refund&&(existing.refund.minor!==event.refund.minor||existing.refund.currency!==event.refund.currency)){
-        refunds.set(key,{...existing,conflict:true});group.warnings.push('Conflicting refund evidence needs checking.');
+      if(existing?.kind==='refund_recorded'&&event.kind==='refund_recorded'){
+        const merged = mergeTransaction(existing,event,'refund','refundDay','refundDateBasis');
+        refunds.set(key,merged);
+        if(merged.conflict)group.warnings.push('Conflicting refund evidence needs checking.');
       }else if (!existing || existing.kind === 'refund_pending') refunds.set(key, event);
       if (group.refundStatus !== 'refund_recorded' || event.kind === 'refund_recorded') group.refundStatus = event.kind;
       group.refundSourceAt = event.receivedAt;
@@ -357,31 +409,43 @@ function projectEvidence(events, { asOf = new Date().toISOString(), coverage = n
       group.nextBillingEvidenceId = null;
     } else if (event.kind === 'subscription_confirmed' || event.kind === 'trial_confirmed') {
       group.notSubscribed = false;
-      group.renewal = 'on'; group.renewalSourceAt = event.receivedAt;
-      group.nextBilling = event.nextBilling || null;
-      group.nextBillingEvidenceId = event.nextBilling ? event.id : null;
-      group.nextBillingAt=event.nextBillingAt||null;
-      group.nextCharge = event.nextCharge || null;
-      group.cancelBy = event.cancelBy || null;
-      group.trialEnds = event.trialEnds || null;
-      // An explicit restart supersedes a prior cancellation; a receipt alone never does.
-      group.accessEnds = event.nextBilling || group.accessEnds;
-      if(event.nextBilling)group.accessEndsAt=event.nextBillingAt||null;
-      if (event.nextBilling) group.accessSourceAt = event.receivedAt;
+      const renewalScheduled = event.kind === 'subscription_confirmed' || event.renewal === 'on'
+        || event.nextBilling && Number.isSafeInteger(event.nextCharge?.minor) && event.nextCharge.minor > 0;
+      if (renewalScheduled) {
+        group.renewal = 'on'; group.renewalSourceAt = event.receivedAt;
+        group.nextBilling = event.nextBilling || null;
+        group.nextBillingEvidenceId = event.nextBilling ? event.id : null;
+        group.nextBillingAt=event.nextBillingAt||null;
+        group.nextCharge = event.nextCharge || null;
+        group.cancelBy = event.cancelBy || null;
+        group.trialEnds = event.trialEnds || null;
+        // Explicit renewed billing can supersede cancellation; a free trial
+        // alone cannot change the previously recorded renewal choice.
+        group.accessEnds = event.nextBilling || group.accessEnds;
+        if(event.nextBilling)group.accessEndsAt=event.nextBillingAt||null;
+        if (event.nextBilling) group.accessSourceAt = event.receivedAt;
+      } else {
+        if (event.trialEnds) group.trialEnds = event.trialEnds;
+        const trialAccess = event.accessEnds || event.trialEnds;
+        if (trialAccess && (!group.accessEnds || trialAccess > group.accessEnds)) {
+          group.accessEnds = trialAccess; group.accessEndsAt = event.accessEndsAt || null; group.accessSourceAt = event.receivedAt;
+        }
+      }
       if (event.cadence) group.cadence = event.cadence;
       if (event.plan) group.plan = event.plan;
       if (event.recurringRate) group.recurringRate = event.recurringRate;
     } else if(event.kind==='invoice_recorded'){
       group.lastInvoice={...event.invoiceAmount,day:event.invoiceDay||null,evidenceId:event.id};
+      if (event.cadence) group.cadence = event.cadence;
+      if (event.plan) group.plan = event.plan;
       group.warnings.push('An invoice amount is recorded; payment, product match and renewal are not established by the invoice alone.');
     } else if (event.kind === 'payment_succeeded') {
       const key = transactionKey(event);
       const previous = payments.get(key);
-      if (previous && (previous.payment.minor !== event.payment.minor || previous.payment.currency !== event.payment.currency)) {
-        payments.set(key, { ...previous, conflict: true }); group.warnings.push('Conflicting payment evidence needs checking.');
-      } else if (!previous) payments.set(key, event);
+      const merged = mergeTransaction(previous,event,'payment','paymentDay','paymentDateBasis');
+      payments.set(key,merged);
+      if (merged.conflict) group.warnings.push('Conflicting payment evidence needs checking.');
       if (event.period?.end && (!group.accessEnds || event.period.end >= group.accessEnds)) { group.accessEnds = event.period.end;group.accessEndsAt=event.period.endAt||null; group.accessSourceAt = event.receivedAt; }
-      group.lastPayment = { ...event.payment, day: event.paymentDay, evidenceId: event.id };
       if (event.recurringRate) group.recurringRate = event.recurringRate;
       if (event.plan) group.plan = event.plan;
       if (event.cadence) group.cadence = event.cadence;
@@ -402,9 +466,14 @@ function projectEvidence(events, { asOf = new Date().toISOString(), coverage = n
     }
     groups.set(groupKey, group);
   }
+  const conflictedPaymentSources = new Set([...payments.values()].filter(e=>e.conflict).flatMap(e=>[e.id,...(e.duplicateEvidenceIds || [])]));
   const subscriptions = [...groups.values()].map(group => {
     const sourceEvents = group.evidenceIds.map(id=>unique.get(id));
-    const positives = sourceEvents.filter(e=>['payment_succeeded','subscription_confirmed','trial_confirmed'].includes(e.kind));
+    const recordedPayments = [...payments.values()].filter(e=>scope(e)===group.serviceKey && !e.conflict)
+      .sort((a,b)=>(a.paymentDateBasis==='explicit'?a.paymentDay || '':'').localeCompare(b.paymentDateBasis==='explicit'?b.paymentDay || '':'') || a.receivedAt.localeCompare(b.receivedAt));
+    const latestPayment = recordedPayments.at(-1);
+    group.lastPayment = latestPayment ? { ...latestPayment.payment, day:latestPayment.paymentDay || null, evidenceId:latestPayment.id } : null;
+    const positives = sourceEvents.filter(e=>['payment_succeeded','subscription_confirmed','trial_confirmed'].includes(e.kind) && !conflictedPaymentSources.has(e.id));
     const issues = sourceEvents.filter(e=>['payment_failed','access_paused'].includes(e.kind)
       && !positives.some(p=>p.kind === 'payment_succeeded' && recovers(p,e)));
     group.unresolvedPaymentProblem = issues.at(-1)?.id || null;
@@ -415,8 +484,13 @@ function projectEvidence(events, { asOf = new Date().toISOString(), coverage = n
       : access === 'available' ? 'paid_access' : 'needs_verification';
     const warnings = [...new Set(group.warnings)];
     const chargesAfterOff = group.renewal === 'off' ? sourceEvents.filter(e=>e.kind === 'payment_succeeded' && e.paymentDay && e.paymentDay > (group.renewalSourceAt || '').slice(0,10)) : [];
-    if(chargesAfterOff.length)status='needs_verification';
-    const relatedHeld = heldEvidence.some(e=>scope(e) === group.serviceKey || !e.accountRef && e.serviceKey === group.providerServiceKey);
+    const invoicesAfterOff = group.renewal === 'off' ? sourceEvents.filter(e=>e.kind === 'invoice_recorded' && e.receivedAt > group.renewalSourceAt
+      && (!e.invoiceDay || e.invoiceDay >= group.renewalSourceAt.slice(0,10))) : [];
+    if(chargesAfterOff.length || invoicesAfterOff.length)status='needs_verification';
+    if(invoicesAfterOff.length)warnings.push('Later invoice evidence followed recorded cancellation. It does not establish payment or reactivation; current status needs checking.');
+    const paymentConflict = sourceEvents.some(e=>conflictedPaymentSources.has(e.id));
+    const relatedHeld = heldEvidence.some(e=>scope(e) === group.serviceKey || !e.accountRef && e.serviceKey === group.providerServiceKey) || paymentConflict;
+    if (paymentConflict && ['active','paid_access'].includes(status)) status = 'needs_verification';
     const expiryEvents = sourceEvents.filter(e=>['access_expiring','access_expired'].includes(e.kind) && !positives.some(p=>recovers(p,e)));
     const explicitExpiry = expiryEvents.filter(e=>e.kind === 'access_expired' && (!e.accessEnds || e.accessEnds <= today) && receivedDay(e) <= today).at(-1);
     const signals = [];
@@ -450,15 +524,16 @@ function projectEvidence(events, { asOf = new Date().toISOString(), coverage = n
     }
     if (group.renewal === 'off') signal('renewal_disabled',sourceEvents.filter(e=>e.kind === 'renewal_disabled').slice(-1));
     signal('charge_after_cancellation',chargesAfterOff,chargesAfterOff.at(-1)?.paymentDay || null);
+    signal('invoice_after_cancellation',invoicesAfterOff,invoicesAfterOff.at(-1)?.invoiceDay || null);
     if (explicitExpiry) signal('expiry_recorded',[explicitExpiry],explicitExpiry.accessEnds);
     if (elapsedRenewal) signal('renewal_overdue',sourceEvents.filter(e=>e.id === group.nextBillingEvidenceId),group.nextBilling);
     signal('expiry_reminders',expiryEvents.filter(e=>e.kind === 'access_expiring'));
     signal('unresolved_failure',issues);
     const resolved = sourceEvents.filter(e=>['payment_failed','access_paused','access_expiring','access_expired'].includes(e.kind) && positives.some(p=>recovers(p,e)));
     signal('recovered_by_payment',positives.filter(p=>p.kind === 'payment_succeeded' && resolved.some(e=>recovers(p,e))));
-    signal('payment_recorded',sourceEvents.filter(e=>e.kind === 'payment_succeeded').slice(-1),group.lastPayment?.day || null);
+    signal('payment_recorded',latestPayment ? [latestPayment] : [],group.lastPayment?.day || null);
     signal('restart_recorded',sourceEvents.filter(e=>['subscription_confirmed','trial_confirmed'].includes(e.kind)).slice(-1));
-    if (relatedHeld) signal('source_conflict',heldEvidence.filter(e=>scope(e) === group.serviceKey || !e.accountRef && e.serviceKey === group.providerServiceKey));
+    if (relatedHeld) signal('source_conflict',[...heldEvidence.filter(e=>scope(e) === group.serviceKey || !e.accountRef && e.serviceKey === group.providerServiceKey),...sourceEvents.filter(e=>conflictedPaymentSources.has(e.id))]);
     const strength = relatedHeld || ambiguousRecovery ? 'limited' : ['renewal_off','expired','active','paid_access'].includes(status) ? 'strong'
       : status === 'likely_canceled' ? combined ? 'moderate' : 'limited' : status === 'payment_problem' ? distinctWarnings.size >= 2 ? 'moderate' : 'limited' : 'limited';
     const statusAssessment = { basis:status === 'likely_canceled'?'inferred':['needs_verification','payment_problem'].includes(status)?'unresolved':'recorded',
@@ -467,7 +542,7 @@ function projectEvidence(events, { asOf = new Date().toISOString(), coverage = n
     if (group.unresolvedPaymentProblem) warnings.push('A payment failure was recorded. Gmail does not establish whether the provider has since resolved it.');
     return { ...group,status,access,warnings,inactivityInference,statusAssessment };
   }).sort((a,b)=>a.name.localeCompare(b.name));
-  const confirmedPayments = [...payments.values()].filter(e => !e.conflict && e.payment.currency);
+  const confirmedPayments = [...payments.values()].filter(e => !e.conflict && Number.isSafeInteger(e.payment?.minor) && e.payment?.currency);
   const chatgpt = subscriptions.find(s => s.serviceKey === 'chatgpt');
   if (chatgpt) {
     const laterOpenAI = unclassifiedPurchases.filter(e => e.providerKey === 'openai' && e.receivedAt > chatgpt.latestSourceAt);
@@ -485,8 +560,8 @@ function projectEvidence(events, { asOf = new Date().toISOString(), coverage = n
     if(!Number.isSafeInteger(total))throw new Error('Recorded total exceeds the safe amount range');
     totals[e.payment.currency]=total;
   }
-  return { asOf, coverage, subscriptions: subscriptions.filter(s => s.status !== 'not_subscribed'), excludedServices: subscriptions.filter(s => s.status === 'not_subscribed'), refunds: [...refunds.values()], oneTimePurchases: [...oneTime.values()], unclassifiedPurchases, heldEvidence, payments: [...payments.values()], recordedPaidMinorByCurrency: totals,
-    unconfirmedCurrencyPayments: [...payments.values()].filter(e => !e.payment.currency).length };
+  return { asOf, coverage, subscriptions: subscriptions.filter(s => s.status !== 'not_subscribed'), excludedServices: subscriptions.filter(s => s.status === 'not_subscribed'), refunds: [...refunds.values()], oneTimePurchases: [...oneTime.values()], otherRecurringPayments:[...otherRecurringPayments.values()], unclassifiedPurchases, heldEvidence, payments: [...payments.values()], recordedPaidMinorByCurrency: totals,
+    unconfirmedCurrencyPayments: [...payments.values()].filter(e => !e.payment?.currency).length };
 }
 
 return { dayOf, currencyDecimals, parseDay, money, htmlToText, normalizedMessage, extractEvidence, projectEvidence };

@@ -11,6 +11,9 @@ test('real stdio MCP discovery and tools read only the configured private datase
   const directory = await mkdtemp(join(tmpdir(), 'renew-before-mcp-fixture-'));
   const events = extractEvidence({ id: 'fixture-plan', sender: 'billing@anthropic.com', authenticatedSenderDomain: 'anthropic.com', subject: 'Your Max subscription is confirmed', receivedAt: '2026-11-01T00:00:00Z', text: 'Your next charge will be on Dec 1, 2026.' });
   events.push(...extractEvidence({id:'fixture-old-plan',sender:'billing@stripe.com',authenticatedSenderDomain:'stripe.com',subject:'Your Replit subscription will renew soon',receivedAt:'2026-01-01T00:00:00Z',text:'Your subscription will renew soon This is a friendly reminder that your Replit subscription for Replit Core will automatically renew on February 1, 2026.'}));
+  events.push(...extractEvidence({id:'fixture-dated-payment',sender:'billing@anthropic.com',authenticatedSenderDomain:'anthropic.com',subject:'Your Claude subscription receipt',receivedAt:'2026-10-15T00:00:00Z',text:'Claude Pro monthly subscription. Paid October 15, 2026. Amount paid USD 20.00'}));
+  events.push(...extractEvidence({id:'fixture-undated-annual',sender:'billing@anthropic.com',authenticatedSenderDomain:'anthropic.com',subject:'Your Claude subscription receipt',receivedAt:'2026-10-16T00:00:00Z',text:'Claude Pro annual subscription. Amount paid USD 144.00'}));
+  events.push({id:'fixture-undated-refund',messageId:'fixture-undated-refund-mail',serviceKey:'claude',service:'Claude',category:'Software',kind:'refund_recorded',authenticated:true,receivedAt:'2026-10-17T00:00:00Z',refund:{currency:'USD',minor:500},refundDay:null,refundDateBasis:'unknown'});
   const snapshot = projectEvidence(events, { asOf: '2026-11-02T00:00:00Z', coverage: { messageCount: 1, exhaustiveMailboxAudit: false } });
   await writeFile(join(directory, 'snapshot.json'), JSON.stringify(snapshot));
   await writeFile(join(directory, 'evidence.json'), JSON.stringify(events));
@@ -23,6 +26,14 @@ test('real stdio MCP discovery and tools read only the configured private datase
     assert.ok(tools.tools.every(t => t.annotations.readOnlyHint === true));
     const dashboard = await client.callTool({ name: 'get_dashboard', arguments: {} });
     assert.equal(dashboard.structuredContent.counts.active, 1);assert.equal(dashboard.structuredContent.counts.likely_canceled,1);
+    assert.deepEqual(snapshot.recordedPaidMinorByCurrency,{USD:16400});
+    assert.deepEqual(dashboard.structuredContent.recordedGrossPaidMinorByCurrency,{USD:2000});
+    assert.equal(dashboard.structuredContent.financialExclusions.length,2);
+    assert.equal(dashboard.structuredContent.financialExclusions[0].reason,'payment_date_unknown');
+    assert.equal(dashboard.structuredContent.unallocatedPaymentCount,1);
+    assert.deepEqual(dashboard.structuredContent.providerRefundMinorByCurrency,{});
+    assert.equal(dashboard.structuredContent.paymentBasis,'receipt_payment_date');
+    assert.equal(dashboard.structuredContent.bankReconciled,false);
     const inactive=await client.callTool({name:'list_subscriptions',arguments:{status:'likely_canceled'}});
     assert.equal(inactive.structuredContent.subscriptions.length,1);assert.equal(inactive.structuredContent.subscriptions[0].inactivityInference.confirmed,false);
     const evidence = await client.callTool({ name: 'get_evidence', arguments: { serviceKey: 'claude' } });

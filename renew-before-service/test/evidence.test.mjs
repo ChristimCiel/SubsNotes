@@ -6,10 +6,32 @@ const asOf = '2026-11-02T10:00:00Z';
 const message = (id, sender, subject, text, receivedAt = '2026-10-05T10:00:00Z') => ({ id, sender, subject, text, receivedAt, authenticatedSenderDomain: sender.split('@')[1] });
 const claude = (id, subject, text, day) => message(id, 'billing@mail.anthropic.com', subject, text, day + 'T10:00:00Z');
 
-test('a dated Substack payment receipt establishes its amount and full paid period without using delivery time',()=>{
+test('a dated newsletter receipt retains amount and access period without treating invoice or receipt date as payment date',()=>{
   const [event]=extractEvidence(message('fictional-newsletter','billing@substack.com',"Your payment receipt from Lenny's Newsletter #EXAMPLE-8",'Subscription for reader@example.invalid Jan 8, 2026 through Jan 8, 2027 $231.40 USD. This is your receipt for invoice #EXAMPLE-8 on Jan 8, 2026.','2026-01-09T00:00:00Z'));
   assert.equal(event.kind,'payment_succeeded');assert.equal(event.payment.minor,23140);assert.equal(event.payment.currency,'USD');
-  assert.equal(event.paymentDay,'2026-01-08');assert.equal(event.period.end,'2027-01-08');assert.equal(event.cadence,'annual');
+  assert.equal(event.paymentDay,null);assert.equal(event.paymentDateBasis,'unknown');assert.equal(event.period.end,'2027-01-08');assert.equal(event.cadence,'annual');
+});
+
+test('an explicit Paid date is retained separately from a newsletter receipt issue date and delivery date',()=>{
+  const [event]=extractEvidence(message('fictional-newsletter-explicit-paid','billing@substack.com',"Your payment receipt from Lenny's Newsletter #FICTIONAL-9",'Subscription Jan 8, 2026 through Jan 8, 2027 $231.40 USD. This is your receipt for invoice #FICTIONAL-9 on Jan 8, 2026. Paid Jan 7, 2026.','2026-01-09T00:00:00Z'));
+  assert.equal(event.paymentDay,'2026-01-07');assert.equal(event.paymentDateBasis,'explicit');
+});
+
+test('an explicit Chinese completed-payment receipt retains exact charge facts without inventing recurring billing',()=>{
+  const [event]=extractEvidence(message('fictional-chinese-payment','billing@publisher.example.invalid','Your receipt from Fictional Publisher',
+    '本次付款已完成。付款時間2026/2/17 23:35:59 付款金額NT$ 12.75 權益到期2027/2/17','2026-02-18T00:01:00Z'));
+  assert.equal(event.kind,'unclassified_purchase');assert.equal(event.payment.minor,1275);assert.equal(event.payment.currency,'TWD');
+  assert.equal(event.paymentDay,'2026-02-17');assert.equal(event.paymentDateBasis,'explicit');assert.equal(event.accessEnds,'2027-02-17');
+  assert.equal(event.cadence,null);assert.equal(projectEvidence([event],{asOf}).subscriptions.length,0);
+  assert.deepEqual(projectEvidence([event],{asOf}).recordedPaidMinorByCurrency,{});
+});
+
+test('invoice issue dates and incomplete Chinese payment requests never establish paid charges',()=>{
+  const invoice=extractEvidence(message('fictional-invoice-only','billing@publisher.example.invalid','Your receipt from Fictional Publisher','eGUI Invoice Date 20260217. Amount $12.75.'));
+  assert.ok(invoice.every(event=>!event.paymentDay && event.kind!=='payment_succeeded'));
+  const pending=extractEvidence(message('fictional-chinese-pending','billing@publisher.example.invalid','Your receipt from Fictional Publisher','本次付款尚未完成。付款時間2026/2/17 付款金額NT$ 12.75'));
+  assert.ok(pending.every(event=>!event.payment && !event.paymentDay));
+  assert.equal(parseDay('2026/2/30'),null);assert.equal(parseDay('02/03/2026'),null);
 });
 
 test('a multiyear prepaid period with a generic yearly-renewal footer is not an annual billing cadence',()=>{
@@ -138,6 +160,14 @@ test('bare dollar symbols never inherit USD, and a late payment cannot silently 
   assert.deepEqual(view.recordedPaidMinorByCurrency, {});
 });
 
+test('a bare-dollar payment uses an explicit currency label and rejects ambiguous multi-currency mentions',()=>{
+  const receipt=text=>extractEvidence(message('fictional-currency','billing@suno.com','Subscription receipt','Suno Pro. Paid Oct 3, 2026. '+text))[0];
+  assert.equal(receipt('US comparison price USD 20. Currency: CAD. Amount paid $27.00').payment.currency,'CAD');
+  assert.equal(receipt('Reference pricing USD 20 or CAD 27. Amount paid $27.00').payment.currency,null);
+  assert.equal(receipt('Currency: USD. Currency: CAD. Amount paid $27.00').payment.currency,null);
+  assert.equal(receipt('US comparison price USD 20. Amount paid CA$27.00').payment.currency,'CAD');
+});
+
 test('duplicate receipts count once; conflicting copies are held outside totals', () => {
   const a = extractEvidence(claude('receipt-a', 'Your receipt from Anthropic', 'Invoice number FIXTURE-1 Oct 3–Nov 3, 2026 Claude Pro Amount paid USD 20', '2026-10-03'));
   const b = extractEvidence(claude('receipt-b', 'Your receipt from Anthropic', 'Invoice number FIXTURE-1 Oct 3–Nov 3, 2026 Claude Pro Amount paid USD 20.00', '2026-10-04'));
@@ -199,6 +229,28 @@ test('unknown processor merchants are retained without creating a confirmed plan
   assert.equal(v.subscriptions.length, 0); assert.equal(v.unclassifiedPurchases.length, 1);
 });
 
+test('PersonalityHub payments and refunds retain one canonical issuer identity',()=>{
+  const events=[
+    ...extractEvidence(message('fictional-personality-paid','billing@personalityhub.ai','Your receipt','PersonalityHub subscription. Invoice number FICTIONAL-ORDER-7. Paid Feb 17, 2026. Amount paid EUR 11.25','2026-02-17T00:00:00Z')),
+    ...extractEvidence(message('fictional-personality-refund','support@personalityhub.ai','Your refund','PersonalityHub Team. Invoice number FICTIONAL-ORDER-7. Total refunded EUR 11.25. Refunded on Feb 18, 2026.','2026-02-18T00:00:00Z'))
+  ];
+  assert.ok(events.every(event=>event.serviceKey==='personalityhub' && event.service==='PersonalityHub'));
+  const result=projectEvidence(events,{asOf});
+  assert.equal(result.subscriptions.length,1);assert.equal(result.payments.length,1);assert.equal(result.refunds.length,1);
+  assert.equal(result.payments[0].reference,result.refunds[0].reference);
+});
+
+test('recipient-oriented Stripe failure notices identify Magic Patterns without creating paid amounts',()=>{
+  const [event]=extractEvidence(message('fictional-magic-failure','billing@stripe.com','Your subscription payment failed',
+    'We attempted to charge your card for your Magic Patterns subscription. The attempted amount was $31.75. Update billing to continue your subscription.'));
+  assert.equal(event.serviceKey,'magic-patterns');assert.equal(event.service,'Magic Patterns');assert.equal(event.kind,'payment_failed');
+  assert.equal(event.payment,undefined);assert.deepEqual(projectEvidence([event],{asOf}).recordedPaidMinorByCurrency,{});
+  assert.equal(projectEvidence([event],{asOf}).subscriptions[0].status,'payment_problem');
+  const merchant=extractEvidence(message('fictional-merchant-revenue','billing@stripe.com','Your customer payment failed',
+    'Your customer could not pay. The customer email says: We attempted to charge your card for your Magic Patterns subscription.'));
+  assert.deepEqual(merchant,[]);
+});
+
 test('refund receipts cannot create a second charge or an active annual period', () => {
   const e = extractEvidence(message('refund', 'billing@stripe.com', 'Your refund from Cursor #123', 'Refund from Cursor $192.00 Refunded on April 6, 2026 Invoice number EXAMPLE-2 Apr 4, 2026–Apr 4, 2027 Cursor Pro Amount paid $192.00 Total refunded without credit note $192.00'));
   const v = projectEvidence(e, { asOf });
@@ -210,6 +262,16 @@ test('provider support can approve a refund and explicitly cancel in one reply',
   const e = extractEvidence(message('support', 'hi@cursor.com', 'Re: Refund and cancellation request', 'Your refund request is now approved. The refund of $192 should appear in 5-10 days. Your subscription has also been cancelled, so you will not be charged.\nOn Sat, Apr 4, 2026, User wrote:\n> My old subscription is confirmed.'));
   const v = projectEvidence(e, { asOf });
   assert.equal(v.subscriptions[0].renewal, 'off'); assert.equal(v.refunds[0].kind, 'refund_pending');
+});
+
+test('a quoted cancellation request cannot turn a pending refund review into provider-confirmed cancellation',()=>{
+  const pending=extractEvidence(message('fictional-refund-review','support@cursor.com','Re: Refund request',
+    'A teammate will review and process the refund request.\nOn Tue, Feb 17, 2026, a customer wrote:\n> Please cancel my subscription and refund the charge. My subscription was cancelled.'));
+  assert.deepEqual(pending.map(event=>event.kind),['refund_pending']);
+  const approved=extractEvidence(message('fictional-refund-approved','support@cursor.com','Re: Refund request',
+    'Your refund request is approved and should appear within 5–10 days. Your subscription has also been cancelled.\nOn Tue, Feb 17, 2026, a customer wrote:\n> Please cancel my subscription and refund the charge.'));
+  assert.deepEqual(approved.map(event=>event.kind),['refund_pending','renewal_disabled']);
+  assert.ok(approved.every(event=>event.kind!=='refund_recorded'));
 });
 
 test('a processed refund makes older paid-through access uncertain', () => {

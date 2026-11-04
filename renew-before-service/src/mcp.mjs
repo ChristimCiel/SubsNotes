@@ -5,6 +5,7 @@ import { readFile, realpath, stat } from 'node:fs/promises';
 import { join, resolve, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { pathToFileURL } from 'node:url';
+import { createCashflowRuntime } from './cashflow.mjs';
 
 export const defaultDataDirectory = () => process.platform === 'darwin' ? join(homedir(), 'Library', 'Application Support', 'Renew Before', 'Evidence')
   : process.platform === 'win32' ? join(process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'Renew Before', 'Evidence')
@@ -32,9 +33,14 @@ export function createEvidenceServer({ directory = defaultDataDirectory() } = {}
     catch { return { isError: true, content: [{ type: 'text', text: 'The private evidence file is unavailable or invalid. Complete a Gmail review in this assistant first. No live scan or background update was performed.' }] }; }
   };
   const annotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
-  server.registerTool('get_dashboard', { description: 'Read the user-selected local subscription snapshot. Returns evidence states and historical gross payment totals with explicit coverage limits. This does not scan Gmail.', inputSchema: z.object({}).strict(), annotations }, safe(async () => {
+  server.registerTool('get_dashboard', { description: 'Read the user-selected local subscription snapshot. Returns evidence states and dated receipt-payment totals, with excluded records and coverage limits. This does not scan Gmail.', inputSchema: z.object({}).strict(), annotations }, safe(async () => {
     const s = await privateJson(root, 'snapshot.json');
-    return { asOf: s.asOf, coverage: s.coverage, counts: s.subscriptions.reduce((a, r) => ({ ...a, [r.status]: (a[r.status] || 0) + 1 }), {}), subscriptions: s.subscriptions, recordedGrossPaidMinorByCurrency: s.recordedPaidMinorByCurrency, unconfirmedCurrencyPayments: s.unconfirmedCurrencyPayments, oneTimePurchases: s.oneTimePurchases, refunds: s.refunds, limits: 'Not a live provider account or bank feed. Unknown currencies, one-time purchases and refunds are separate from gross subscription receipts. No keep/cancel recommendation is implied.' };
+    const cashflow = createCashflowRuntime().summarize(s, { trustConnectorReads:true });
+    return { asOf: s.asOf, coverage: s.coverage, counts: s.subscriptions.reduce((a, r) => ({ ...a, [r.status]: (a[r.status] || 0) + 1 }), {}), subscriptions: s.subscriptions,
+      recordedGrossPaidMinorByCurrency: cashflow.paidMinorByCurrency, providerRefundMinorByCurrency:cashflow.providerRefundMinorByCurrency,
+      financialExclusions:cashflow.excluded, unallocatedPaymentCount:cashflow.excluded.filter(row=>!row.refund&&row.reason==='payment_date_unknown').length, paymentBasis:cashflow.basis, bankReconciled:false,
+      unconfirmedCurrencyPayments: s.unconfirmedCurrencyPayments, oneTimePurchases: s.oneTimePurchases, refunds: s.refunds,
+      limits: 'Not a live provider account or bank feed. Only source-verified payments with explicit payment dates, known amounts and currencies enter gross subscription totals. Annual charges stay whole in the payment month. Excluded records, one-time purchases and provider refunds remain separate. Refund evidence does not establish bank settlement. No keep/cancel recommendation is implied.' };
   }));
   server.registerTool('list_subscriptions', { description: 'List local service history records by evidence state. Active means future renewal evidence in email, not a live billing API confirmation. The legacy likely_canceled status code means likely inactive: an unconfirmed estimate from a renewal more than 60 days overdue or multiple unresolved billing signals. Assessments expose evidence strength, chronology and source IDs, not a statistical probability or provider cancellation.', inputSchema: z.object({ status: z.enum(['active','paid_access','renewal_off','needs_verification','payment_problem','likely_canceled','expired']).optional() }).strict(), annotations }, safe(async ({ status }) => {
     const s = await privateJson(root, 'snapshot.json');

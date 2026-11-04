@@ -127,3 +127,27 @@ test('both entrypoints preserve the original identity when a reread changes or o
     assert.equal(repeat.state.events.length,2,'identity-collision retries remain bounded');
   }
 });
+
+test('both entrypoints preserve a source-reviewed invoice product correction when the native parser still lacks the document',async()=>{
+  const reply={id:'synthetic-document-invoice',sender:'billing@tax.openai.com',subject:'Your tax invoice is ready',plaintextBody:'A tax invoice is available in your account.',date:'2026-08-02T00:00:00Z'};
+  const state=(await mergeAssistantEvidence({state:{version:1,events:[],scannedIds:[],mailboxHash:digest('owner@example.invalid')},identityReply,messages:[reply],asOf,parserVersion:'before'},runtime)).state;
+  const source=state.events[0];
+  Object.assign(source,{kind:'invoice_recorded',serviceKey:'fictional-reviewed-product',service:'Fictional reviewed product',category:'Software',invoiceAmount:{minor:1700,currency:'EUR'},invoiceDay:'2026-08-02',receiptVerification:{checkedAt:asOf,fields:['kind','serviceKey','service','category','invoiceAmount','invoiceDay']}});
+  const result=await compareEntryPoints(state,reply);
+  assert.equal(result.state.events.length,1);assert.equal(result.state.events[0].id,source.id);
+  assert.equal(result.state.events[0].serviceKey,'fictional-reviewed-product');assert.equal(result.state.events[0].kind,'invoice_recorded');
+  assert.equal(result.state.events[0].sourceProcessingConflict,undefined);assert.equal(result.state.sourceProcessing[reply.id][1],'extracted');
+  const replay=await mergeAssistantEvidence({state:result.state,identityReply,messages:[reply],asOf,parserVersion:'after'},runtime);
+  assert.equal(replay.state.events.length,1);assert.equal(replay.state.events[0].serviceKey,'fictional-reviewed-product');
+});
+
+test('unreviewed product moves stay held while an explicitly reviewed financial category survives replay',async()=>{
+  const moved=await baseline();moved.events[0].serviceKey='fictional-unreviewed-product';
+  const held=await compareEntryPoints(moved,paidReply);
+  assert.equal(held.state.sourceProcessing[paidReply.id][5],'source_identity_conflict');
+  assert.ok(held.state.events.some(event=>event.sourceProcessingConflict));
+  const classified=await baseline();Object.assign(classified.events[0],{category:'Donations',receiptVerification:{checkedAt:asOf,fields:['category','kind','payment','paymentDay','paymentDateBasis']}});
+  const result=await compareEntryPoints(classified,paidReply);
+  assert.equal(result.state.events.length,1);assert.equal(result.state.events[0].category,'Donations');assert.equal(result.state.events[0].sourceProcessingConflict,undefined);
+  assert.equal(projectEvidence(result.state.events,{asOf,trustConnectorReads:true}).payments.length,0);
+});

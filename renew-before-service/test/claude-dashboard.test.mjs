@@ -9,6 +9,9 @@ import { createCashflowRuntime } from '../src/cashflow.mjs';
 import { createFxRuntime } from '../src/fx.mjs';
 import { createSubscriptionViewRuntime } from '../src/subscription-view.mjs';
 import { createServiceBrandsRuntime } from '../src/service-brands.mjs';
+import { createSourceEvidenceMerger } from '../src/web-sync.mjs';
+import { preserveReceiptVerification } from '../src/receipt-verification.mjs';
+import { createLedgerContracts } from '../src/ledger-contracts.mjs';
 
 const flush = () => new Promise(resolve=>setImmediate(resolve));
 const clone = value => JSON.parse(JSON.stringify(value));
@@ -43,7 +46,7 @@ async function harness({events=null,prefs={},freezePreferences=false,now=null,mc
   const window={claude:{use:async key=>key==='mcp'&&mcpReady?await mcpReady:capabilities[key]},addEventListener(){}};
   const ClockDate = now ? class extends Date { constructor(...args){super(...(args.length?args:[now]));}static now(){return new Date(now).getTime();} } : Date;
   const mount=vm.runInNewContext('('+mountClaudeDashboard.toString()+')',{document,window,crypto:webcrypto,TextEncoder,Date:ClockDate,setInterval(){}});
-  mount({createEvidenceRuntime,createCashflowRuntime,createFxRuntime,createSubscriptionViewRuntime,createServiceBrandsRuntime,extractWebEvidence(){},createClaudePersonalStore:()=>store,createClaudeRatesClient:()=>({load:async()=>{throw new Error('Rates unavailable in this test');}}),createClaudeGmailClient:()=>({}),createWebSync:()=>({run:syncRun||(()=>{throw new Error('No scan is requested by these tests');})})});
+  mount({createEvidenceRuntime,createCashflowRuntime,createFxRuntime,createSubscriptionViewRuntime,createServiceBrandsRuntime,createSourceEvidenceMerger,preserveReceiptVerification,createLedgerContracts,extractWebEvidence(){},createClaudePersonalStore:()=>store,createClaudeRatesClient:()=>({load:async()=>{throw new Error('Rates unavailable in this test');}}),createClaudeGmailClient:()=>({}),createWebSync:()=>({run:syncRun||(()=>{throw new Error('No scan is requested by these tests');})})});
   for(let i=0;i<4;i++)await flush();
   const open=async key=>{const button=new Element('row');button.dataset.record=key;button.closest=()=>button;await elements.get('list').dispatch('click',{target:button});};
   const change=days=>{const select=elements.get('review');select.value=String(days);return select.dispatch('change');};
@@ -240,7 +243,7 @@ test('bundled logos and their attribution remain static data in the empty-accoun
 test('likely-canceled plans hide by default but remain inspectable and bilingual without changing the saved ledger',async()=>{
   const events=[{id:'fictional-old',messageId:'fictional-old-mail',serviceKey:'fictional-old',service:'Fictional Old Plan',category:'Software',kind:'subscription_confirmed',authenticated:true,receivedAt:'2020-01-01T00:00:00Z',nextBilling:'2020-02-01'}];
   const app=await harness({events});
-  assert.match(app.elements.get('count').textContent,/0 records · 1 likely inactive hidden/);
+  assert.match(app.elements.get('count').textContent,/0 records · All dates · 1 likely inactive hidden/);
   assert.doesNotMatch(app.elements.get('list').innerHTML,/data-record="fictional-old"/);
   const filter=app.elements.get('filter');filter.value='likely_canceled';await filter.dispatch('change');
   assert.match(app.elements.get('list').innerHTML,/Fictional Old Plan/);assert.match(app.elements.get('list').innerHTML,/Likely inactive/);
@@ -265,7 +268,7 @@ test('Refresh reads externally updated records without scanning Gmail or replaci
   const original=app.persisted,added={...original.events[0],id:'gamma',messageId:'mail-gamma',serviceKey:'gamma',service:'Fictional gamma'};
   app.replace({...original,storageRevision:'revision-two',events:[...original.events,added]});
   await app.elements.get('refresh').dispatch('click');for(let i=0;i<8;i++)await flush();
-  assert.equal(scans,0);assert.match(app.elements.get('status').textContent,/Saved records reloaded/);assert.equal(app.elements.get('count').textContent,'3 records');assert.match(app.elements.get('list').innerHTML,/Fictional gamma/);
+  assert.equal(scans,0);assert.match(app.elements.get('status').textContent,/Saved records reloaded/);assert.equal(app.elements.get('count').textContent,'3 records · All dates');assert.match(app.elements.get('list').innerHTML,/Fictional gamma/);
   assert.deepEqual(app.persisted.events.slice(0,2),original.events);
   assert.equal(app.elements.get('refresh').disabled,false);
 });
@@ -280,4 +283,56 @@ test('month and currency selections stay interactive during sync and persist aft
   assert.equal(app.pendingSaves.length,1);app.pendingSaves[0].resolve();await running;
   assert.equal(app.persisted.prefs.month,'2026-07');assert.equal(app.persisted.prefs.currency,'EUR');
   assert.equal(month.value,'2026-07');assert.equal(currency.value,'EUR');
+});
+
+test('choosing a payment month opens exactly the verified expense rows used by its total, with full annual charges only in their payment month',async()=>{
+  const events=[
+    syntheticReceipt('annual-paid',{serviceKey:'annual',service:'Fictional Annual',cadence:'annual',payment:{currency:'USD',minor:12000},paymentDay:'2026-07-31',receivedAt:'2026-08-01T00:30:00Z'}),
+    syntheticReceipt('monthly-paid',{serviceKey:'monthly',service:'Fictional Monthly',paymentDay:'2026-08-20'}),
+    syntheticReceipt('future-renewal',{serviceKey:'upcoming',service:'Fictional Upcoming',kind:'renewal_notice',payment:undefined,nextCharge:{currency:'USD',minor:99900},nextBilling:'2026-08-25'}),
+    syntheticReceipt('unknown-date',{serviceKey:'unknown',service:'Fictional Date Unknown',paymentDay:null,paymentDateBasis:'unknown'}),
+    syntheticReceipt('held-paid',{serviceKey:'held',service:'Fictional Held',sourceProcessingConflict:true})
+  ];
+  const app=await harness({events,prefs:{language:'en'}}),month=app.elements.get('month');
+  month.value='2026-08';await month.dispatch('change');
+  assert.match(app.elements.get('tabs').innerHTML,/data-view="payments" aria-pressed="true"/);
+  assert.equal(app.elements.get('originals').textContent,'USD 12.00');
+  assert.match(app.elements.get('list').innerHTML,/Fictional Monthly/);
+  assert.doesNotMatch(app.elements.get('list').innerHTML,/Fictional Annual|Fictional Upcoming|Fictional Date Unknown|Fictional Held/);
+  month.value='2026-07';await month.dispatch('change');
+  assert.equal(app.elements.get('originals').textContent,'USD 120.00');
+  assert.match(app.elements.get('list').innerHTML,/Fictional Annual/);
+  assert.doesNotMatch(app.elements.get('list').innerHTML,/Fictional Monthly/);
+  month.value='2026-09';await month.dispatch('change');
+  assert.match(app.elements.get('list').innerHTML,/No matching records/);
+  assert.doesNotMatch(app.elements.get('originals').textContent,/120|12\.00|999/);
+});
+
+test('reopening a selected month restores its expense list while the subscription library and review queue explicitly cover all dates',async()=>{
+  for(const language of ['en','zh']){
+    const events=[syntheticReceipt('known'),syntheticReceipt('no-date',{serviceKey:'unknown',service:'Fictional Unknown Date',paymentDay:null,paymentDateBasis:'unknown'})];
+    const app=await harness({events,prefs:{language,month:'2026-08'}});
+    assert.match(app.elements.get('tabs').innerHTML,/data-view="payments" aria-pressed="true"/);
+    assert.doesNotMatch(app.elements.get('list').innerHTML,/Fictional Unknown Date/);
+    const choose=async view=>app.elements.get('tabs').dispatch('click',{target:{closest:()=>({dataset:{view}})}});
+    await choose('other');
+    assert.match(app.elements.get('list').innerHTML,/Fictional Unknown Date/);
+    assert.match(app.elements.get('list').innerHTML,language==='zh'?/付款仍需核對/:/Payment needs verification/);
+    assert.match(app.elements.get('count').textContent,language==='zh'?/所有日期/:/All dates/);
+    await choose('subs');
+    assert.equal(app.elements.get('list-label').textContent,language==='zh'?'全部訂閱':'All subscriptions');
+    assert.match(app.elements.get('count').textContent,language==='zh'?/所有日期/:/All dates/);
+    await app.open('fictional');
+    assert.match(app.elements.get('detail-body').innerHTML,language==='zh'?/已記錄付款・所有月份/:/Recorded payments · all months/);
+  }
+});
+
+
+test('saved stale review counts are recomputed across parser versions before Gmail connects',async()=>{
+  let release;const gate=new Promise(resolve=>{release=resolve;});
+  const initialState={parserVersion:'4',scannedIds:['old','new'],sourceProcessing:{old:['3','needs_review',1,1,null,'document_review'],new:['4','needs_review',1,1,null,'currency_unknown']},processingSummary:{needsReview:1}};
+  const app=await harness({initialState,mcpReady:gate});
+  assert.match(app.elements.get('coverage').textContent,/2 messages need another look/);
+  assert.match(app.elements.get('list').innerHTML,/Fictional alpha/);
+  release({});
 });

@@ -132,3 +132,42 @@ test('successful billing after a recorded cancellation makes current status unce
   assert.equal(result.statusAssessment.confidence,'limited');assert.ok(result.statusAssessment.signals.some(s=>s.code==='charge_after_cancellation'));
   const delayed=paid('old-delayed','2026-07-01',{paymentDay:'2026-05-01'});assert.equal(sub([off,delayed]).status,'renewal_off');
 });
+
+test('an invoice issued after cancellation requires a current check without inventing payment or renewed access',()=>{
+  const off=row('renewal_disabled','off-invoice-case','2026-06-01',{accessEnds:'2026-06-15'});
+  const invoice=row('invoice_recorded','after-off-invoice','2026-07-01',{invoiceAmount:{minor:1700,currency:'EUR'},invoiceDay:'2026-07-01'});
+  const result=sub([off,invoice]);assert.equal(result.renewal,'off');assert.equal(result.status,'needs_verification');
+  assert.equal(view([off,invoice]).payments.length,0);assert.deepEqual(view([off,invoice]).recordedPaidMinorByCurrency,{});
+  assert.equal(result.statusAssessment.confidence,'limited');assert.ok(result.statusAssessment.signals.some(s=>s.code==='invoice_after_cancellation'));
+  const oldInvoice={...invoice,id:'old-delayed-invoice',invoiceDay:'2026-05-01'};
+  assert.equal(sub([off,oldInvoice]).status,'renewal_off');
+  const undated=sub([off,{...invoice,id:'unknown-issue-day',invoiceDay:null}]);
+  assert.equal(undated.status,'needs_verification');assert.ok(undated.warnings.some(warning=>warning.includes('Later invoice evidence')));
+});
+
+test('explicit invoice plan and cadence remain visible without establishing a payment or renewal schedule',()=>{
+  const invoice=row('invoice_recorded','fictional-plan-invoice','2026-07-01',{invoiceAmount:{minor:1700,currency:'EUR'},invoiceDay:'2026-07-01',cadence:'monthly',plan:'Fictional Pro'});
+  const result=sub([invoice]);assert.equal(result.plan,'Fictional Pro');assert.equal(result.cadence,'monthly');
+  assert.equal(result.renewal,'unknown');assert.equal(result.nextBilling,null);assert.equal(view([invoice]).payments.length,0);
+});
+
+test('an unpriced trial with an ambiguous access date never invents automatic paid renewal',()=>{
+  const trial=row('trial_confirmed','fictional-unpriced-trial','2026-07-01',{evidence:'Full access until August 28.',trialEnds:null,nextBilling:null});
+  const result=sub([trial]);assert.equal(result.renewal,'unknown');assert.equal(result.nextBilling,null);assert.equal(result.accessEnds,null);
+  assert.equal(result.status,'needs_verification');assert.equal(view([trial]).payments.length,0);
+});
+
+test('a later free trial preserves renewal-off history and cannot shorten previously paid access',()=>{
+  const off=row('renewal_disabled','fictional-off-before-trial','2026-06-01',{accessEnds:'2026-12-01'});
+  const trial=row('trial_confirmed','fictional-free-trial','2026-07-01',{trialEnds:'2026-08-01',accessEnds:'2026-08-01'});
+  const result=sub([off,trial]);assert.equal(result.renewal,'off');assert.equal(result.renewalSourceAt,off.receivedAt);
+  assert.equal(result.status,'renewal_off');assert.equal(result.accessEnds,'2026-12-01');assert.equal(result.nextBilling,null);
+  const receipt=paid('fictional-paid-before-trial','2026-06-01',{period:{start:'2026-06-01',end:'2026-12-01'}});
+  assert.equal(sub([receipt,trial]).accessEnds,'2026-12-01');assert.equal(sub([receipt,trial]).renewal,'unknown');
+});
+
+test('a trial with an explicit priced renewal schedule retains its scheduled renewal behavior',()=>{
+  const trial=row('trial_confirmed','fictional-priced-trial','2026-07-01',{trialEnds:'2026-12-01',nextBilling:'2026-12-01',nextCharge:{minor:1700,currency:'EUR'},cadence:'monthly'});
+  const result=sub([trial]);assert.equal(result.renewal,'on');assert.equal(result.nextBilling,'2026-12-01');assert.equal(result.status,'active');
+  assert.equal(view([trial]).payments.length,0);
+});

@@ -237,8 +237,8 @@ test('successful retries are idempotent and a legacy manifest-sized history stay
 test('reviewed-family protection does not suppress explicitly distinct line items or partial refunds', async () => {
   const x = setup();
   const original = { id: 'refund-one', messageId: 'paid', kind: 'refund_recorded', receivedAt: time,
-    refund: { minor: 1000, currency: 'EUR' }, refundDay: '2026-08-15', refundRef: 'partial-one',
-    receiptVerification: { checkedAt: time, fields: ['kind', 'refund', 'refundDay'] } };
+    refund: { minor: 1000, currency: 'EUR' }, refundDay: '2026-08-15', refundDateBasis:'explicit', refundRef: 'partial-one',
+    receiptVerification: { checkedAt: time, fields: ['kind', 'refund', 'refundDay', 'refundDateBasis'] } };
   await x.store.save({ version: 1, events: [original], scannedIds: ['paid'], prefs: {} });
   x.gmail.search = async () => ({ ids: [], nextPageToken: null });
   const incoming = { ...original, id: 'refund-two', refundRef: 'partial-two', refund: { minor: 500, currency: 'EUR' } };

@@ -1,4 +1,4 @@
-import { cp, mkdir, mkdtemp } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -9,7 +9,7 @@ if (!npmCli) throw new Error('Run this builder through npm run package:mcpb');
 const stage = await mkdtemp(join(tmpdir(), 'renew-before-reader-build-'));
 await mkdir(join(stage, 'src'));
 // Explicit allowlist. No private data, environment files or application exports.
-await cp(join(root, 'src', 'mcp.mjs'), join(stage, 'src', 'mcp.mjs'));
+for (const file of ['mcp.mjs','cashflow.mjs']) await cp(join(root, 'src', file), join(stage, 'src', file));
 await cp(join(root, 'mcpb', 'manifest.json'), join(stage, 'manifest.json'));
 for (const file of ['package.json','package-lock.json','LICENSE']) await cp(join(root, file), join(stage, file));
 const run = (args, cwd) => {
@@ -18,6 +18,7 @@ const run = (args, cwd) => {
 };
 run(['ci','--omit=dev','--ignore-scripts'], stage);
 await mkdir(join(root, 'dist'), { recursive: true });
-const output = join(root, 'dist', 'SubsNotes-Evidence-Reader-0.1.0.mcpb');
+const manifest=JSON.parse(await readFile(join(root,'mcpb','manifest.json'),'utf8'));
+const output = join(root, 'dist', `SubsNotes-Evidence-Reader-${manifest.version}.mcpb`);
 run(['exec','--yes','--package=@anthropic-ai/mcpb@2.1.2','--','mcpb','pack',stage,output], root);
 console.log(output);

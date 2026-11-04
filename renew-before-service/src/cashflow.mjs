@@ -15,14 +15,17 @@ export function createCashflowRuntime() {
       const amount = refund ? event.refund : event.payment;
       const date = refund ? event.refundDay : event.paymentDay;
       const basis = refund ? event.refundDateBasis : event.paymentDateBasis;
-      const trusted=event.authenticated||event.userVerified||(trustConnectorReads&&event.sourceFormat==='claude_plaintext'&&event.sourceReadAt);
-      if(trusted&&day(date)&&basis==='explicit'){
+      const trusted=event.authenticated===true||event.userVerified===true||(trustConnectorReads&&event.sourceFormat==='claude_plaintext'&&typeof event.sourceReadAt==='string'&&Number.isFinite(Date.parse(event.sourceReadAt)));
+      const held=event.sourceProcessingConflict===true||event.candidateStatus==='needs_review'||event.importStatus==='needs_source_recheck';
+      const recorded=event.kind===(refund?'refund_recorded':'payment_succeeded');
+      if(trusted&&!held&&recorded&&day(date)&&basis==='explicit'){
         months.add(date.slice(0,7));
         if(month&&date.slice(0,7)!==month)return;
       }
       let reason = !trusted ? 'unverified_source'
+        : held ? 'held_for_review'
+        : !recorded ? refund ? 'refund_not_recorded' : 'payment_not_recorded'
         : event.conflict ? 'conflicting_amount'
-        : refund && event.kind !== 'refund_recorded' ? 'refund_not_recorded'
         : !amount || !Number.isSafeInteger(amount.minor) || amount.minor < 0 ? 'amount_unknown'
         : !currencies.has(amount.currency) ? 'currency_unknown'
         : !day(date) || basis !== 'explicit' ? 'payment_date_unknown' : null;

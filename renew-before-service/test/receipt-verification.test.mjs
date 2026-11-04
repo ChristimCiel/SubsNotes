@@ -17,3 +17,21 @@ test('reviewed fields cannot cross explicit account or line-item identities',()=
   assert.equal(preserveReceiptVerification(prior,{...incoming,accountRef:'account-two'}).payment.currency,null);
   assert.equal(preserveReceiptVerification(prior,{...incoming,lineItemRef:'line-two'}).payment.currency,null);
 });
+
+test('an explicitly reviewed product mapping is source scoped and cannot cross account or transaction identities',()=>{
+  const prior={id:'fixture-product-event',messageId:'fixture-product-mail',serviceKey:'fictional-reviewed-product',accountRef:'account-one',lineItemRef:'line-one',transactionRef:'transaction-one',refundRef:'refund-one',receiptVerification:{checkedAt:'2026-10-01T00:00:00Z',fields:['serviceKey']}};
+  const incoming={...prior,serviceKey:'fictional-unclassified-product'};delete incoming.receiptVerification;
+  assert.equal(preserveReceiptVerification(prior,incoming).serviceKey,'fictional-reviewed-product');
+  for(const field of ['id','messageId','accountRef','lineItemRef','transactionRef','refundRef']){
+    assert.equal(preserveReceiptVerification(prior,{...incoming,[field]:'different'}).serviceKey,'fictional-unclassified-product');
+  }
+  const unreviewedMapping={...prior,receiptVerification:{...prior.receiptVerification,fields:['payment']}};
+  assert.equal(preserveReceiptVerification(unreviewedMapping,incoming).serviceKey,'fictional-unclassified-product');
+});
+
+test('a reviewed unknown payment date remains unknown rather than inheriting an invoice or receipt date on replay',()=>{
+  const prior={id:'fictional-undated-paid',messageId:'fictional-undated-mail',paymentDay:null,paymentDateBasis:'unknown',receiptVerification:{checkedAt:'2026-10-01T00:00:00Z',fields:['paymentDay','paymentDateBasis']}};
+  const incoming={id:prior.id,messageId:prior.messageId,paymentDay:'2026-09-30',paymentDateBasis:'explicit'};
+  const result=preserveReceiptVerification(prior,incoming);
+  assert.equal(result.paymentDay,null);assert.equal(result.paymentDateBasis,'unknown');
+});

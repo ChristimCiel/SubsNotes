@@ -3,7 +3,7 @@ import { createLedgerContracts } from './ledger-contracts.mjs';
 
 // Both full discovery and targeted assistant reads use this source-scoped
 // merge. Dependencies are explicit so the same function runs in the Artifact.
-export function createSourceEvidenceMerger({ preserveReceiptVerification, billingExcerpt }) {
+export function createSourceEvidenceMerger({ preserveReceiptVerification, billingExcerpt, hash = null }) {
   if (typeof preserveReceiptVerification !== 'function' || typeof billingExcerpt !== 'function') throw new Error('Source merge dependencies are required');
   const family = event => ['payment_succeeded', 'one_time_purchase', 'wallet_top_up', 'unclassified_purchase'].includes(event.kind) ? 'payment'
     : ['refund_recorded', 'refund_pending'].includes(event.kind) ? 'refund' : null;
@@ -23,17 +23,25 @@ export function createSourceEvidenceMerger({ preserveReceiptVerification, billin
     if (events.some(event => event.sourceProcessingConflict)) return 'source_reclassified';
     if (events.some(event => event.sourceRequiresDocumentReview && !reviewed(event) || event.kind === 'unclassified_purchase')) return 'document_review';
     for (const event of events) {
+      if (event.kind === 'invoice_recorded') {
+        if (!Number.isSafeInteger(event.invoiceAmount?.minor)) return 'amount_unknown';
+        if (!event.invoiceAmount?.currency || event.currencyAmbiguous) return 'currency_unknown';
+        if (!event.invoiceDay) return 'invoice_date_unknown';
+      }
       const key = family(event);
       if (key && !Number.isSafeInteger(event[key]?.minor)) return 'amount_unknown';
       if (key && !event[key]?.currency || event.currencyAmbiguous) return 'currency_unknown';
-      if (event.kind === 'payment_succeeded' && !event.paymentDay) return 'payment_date_unknown';
-      if (event.kind === 'refund_recorded' && !event.refundDay) return 'refund_date_unknown';
+      if (event.kind === 'payment_succeeded' && (!event.paymentDay || event.paymentDateBasis !== 'explicit')) return 'payment_date_unknown';
+      if (event.kind === 'refund_recorded' && (!event.refundDay || event.refundDateBasis !== 'explicit')) return 'refund_date_unknown';
     }
     return null;
   }
-  function merge({ events, message, parsed, parserVersion = '3' }) {
+  function merge({ events, message, parsed, parserVersion = '4', processingRecord = null, sourceDigest = null }) {
     if (!(events instanceof Map) || !message?.id || !Array.isArray(parsed)) throw new Error('Observed source and parsed records are required');
     if (typeof parserVersion !== 'string' || !parserVersion.trim() || parserVersion.length > 24) throw new Error('A bounded parser version is required');
+    if (reviewedNonBilling(processingRecord) && processingRecord[6][1] === sourceDigest) return { newEvents: [], reason:null, sourceReview:structuredClone(processingRecord[6]) };
+    const changedReview = reviewedNonBilling(processingRecord);
+    if (changedReview) parsed = parsed.map(event=>({...event,sourceProcessingConflict:true}));
     const sourceBefore = [...events.values()].filter(event => event.messageId === message.id), reviewedBefore = sourceBefore.filter(reviewed);
     const newEvents = [];
     let conflict = false, identityConflict = false, incomplete = false;
@@ -51,7 +59,7 @@ export function createSourceEvidenceMerger({ preserveReceiptVerification, billin
         subject: billingExcerpt(event.subject, { maxLength: 200 }), evidence: billingExcerpt(event.evidence),
         attachmentCount: message.attachmentCount || 0, attachmentContentRead: false,
         bodyFormat: message.bodyFormat || 'plain_text', bodyTruncated: !!message.truncated, senderAuthenticationAvailable: false });
-      if (previousRecord && (previousRecord.messageId !== event.messageId || previousRecord.serviceKey !== event.serviceKey || !sameTransaction(previousRecord, event))) {
+      if (previousRecord && (previousRecord.messageId !== event.messageId || previousRecord.serviceKey !== record.serviceKey || !sameTransaction(previousRecord, event))) {
         // A reused ID must not move facts or document proof to another account,
         // line item or service. Keep the original identity and hold the reread.
         if (!reviewed(previousRecord)) events.set(previousRecord.id, { ...previousRecord, sourceProcessingConflict: true });
@@ -90,38 +98,58 @@ export function createSourceEvidenceMerger({ preserveReceiptVerification, billin
       events.set(record.id, record); newEvents.push(record);
     }
     const sourceEvents = [...events.values()].filter(event => event.messageId === message.id);
-    return { newEvents, reason: identityConflict ? 'source_identity_conflict' : conflict ? 'reviewed_source_conflict' : unresolvedReason(message, parsed.length ? sourceEvents : []) || (incomplete ? 'incomplete_reread' : null) };
+    const reviewedSource = !parsed.length && sourceBefore.length > 0 && sourceBefore.every(reviewed) && String(message.text || '').trim() && !message.truncated;
+    return { newEvents, reason: changedReview ? 'reviewed_source_changed' : identityConflict ? 'source_identity_conflict' : conflict ? 'reviewed_source_conflict' : unresolvedReason(message, parsed.length || reviewedSource ? sourceEvents : []) || (incomplete ? 'incomplete_reread' : null) };
   }
   const retryLimit = 3, day = 86400000;
-  const validProcessingRecord = record => Array.isArray(record) && record.length === 6 && typeof record[0] === 'string'
+  const validSourceReview = review => Array.isArray(review) && review.length === 2 && review[0] === 'non_billing' && typeof review[1] === 'string' && /^[a-f0-9]{64}$/.test(review[1]);
+  const validProcessingRecord = record => Array.isArray(record) && [6,7].includes(record.length) && typeof record[0] === 'string'
     && ['extracted', 'needs_review'].includes(record[1]) && Number.isInteger(record[2]) && record[2] > 0 && record[2] <= retryLimit
-    && Number.isFinite(record[3]) && (record[4] === null || Number.isFinite(record[4])) && (record[5] === null || typeof record[5] === 'string');
-  const processingDue = (record, parserVersion, now) => !validProcessingRecord(record) || record[0] !== parserVersion || record[1] === 'needs_review'
-    && record[2] < retryLimit && record[4] !== null && record[4] <= now;
-  function nextProcessingRecord(previous, { parserVersion, now, reason }) {
+    && Number.isFinite(record[3]) && (record[4] === null || Number.isFinite(record[4])) && (record[5] === null || typeof record[5] === 'string')
+    && (record.length === 6 || record[1] === 'extracted' && record[4] === null && record[5] === null && validSourceReview(record[6]));
+  const reviewedNonBilling = record => validProcessingRecord(record) && record.length === 7;
+  const processingDue = (record, parserVersion, now) => !reviewedNonBilling(record) && (!validProcessingRecord(record) || record[0] !== parserVersion || record[1] === 'needs_review'
+    && record[2] < retryLimit && record[4] !== null && record[4] <= now);
+  async function sourceFingerprint(message) {
+    if (typeof hash !== 'function' || !message?.id || typeof message.text !== 'string' || !message.sender || !Number.isFinite(Date.parse(message.receivedAt))) throw new Error('A real source observation and digest function are required');
+    const fingerprint = await hash(JSON.stringify([message.id,message.sender,message.subject || '',new Date(message.receivedAt).toISOString(),message.text.replace(/\r\n?/g,'\n').trim()]));
+    if (typeof fingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(fingerprint)) throw new Error('A SHA-256 source fingerprint is required');
+    return fingerprint;
+  }
+  async function reviewSource({ events, message, parserVersion, now, decision }) {
+    if (decision !== 'non_billing' || !(events instanceof Map) || !Number.isFinite(now) || typeof parserVersion !== 'string' || !parserVersion.trim() || parserVersion.length > 24) throw new Error('A supported source review is required');
+    if (!message?.text?.trim() || message.truncated || !Number.isFinite(Date.parse(message.sourceReadAt))) throw new Error('Read the complete original source before reviewing it');
+    const meaningful = event => event.kind !== 'unclassified_purchase' || event.sourceRequiresDocumentReview || ['payment','refund','invoiceAmount','recurringRate','nextCharge','paymentDay','refundDay','invoiceDay','period','nextBilling','accessEnds','trialEnds','cancelBy','plan','reference'].some(key=>event[key]!=null);
+    if ([...events.values()].some(event=>event.messageId === message.id && meaningful(event))) throw new Error('Existing billing or subscription evidence cannot be dismissed as non-billing');
+    return [parserVersion,'extracted',1,now,null,null,[decision,await sourceFingerprint(message)]];
+  }
+  function nextProcessingRecord(previous, { parserVersion, now, reason, sourceReview = null }) {
     const attempts = validProcessingRecord(previous) && previous[0] === parserVersion ? Math.min(retryLimit, previous[2] + 1) : 1;
-    return [parserVersion, reason ? 'needs_review' : 'extracted', attempts, now,
+    const record = [parserVersion, reason ? 'needs_review' : 'extracted', attempts, now,
       reason && attempts < retryLimit ? now + (attempts === 1 ? day : 3 * day) : null, reason];
+    if (!reason && validSourceReview(sourceReview)) {record.push(structuredClone(sourceReview));record[3]=reviewedNonBilling(previous)?previous[3]:now;}
+    return record;
   }
   function summarizeProcessing(known, processing, { parserVersion, now }) {
     const records = [...known].map(id => validProcessingRecord(processing[id]) ? processing[id] : null);
     return { read: known.size,
-      extracted: records.filter(record => record?.[0] === parserVersion && record[1] === 'extracted').length,
-      needsReview: records.filter(record => record?.[0] === parserVersion && record[1] === 'needs_review').length,
+      extracted: records.filter(record => reviewedNonBilling(record) || record?.[0] === parserVersion && record[1] === 'extracted').length,
+      reviewedNonBilling:records.filter(reviewedNonBilling).length,
+      needsReview: records.filter(record => record?.[1] === 'needs_review').length,
       retryPending: records.filter(record => record?.[0] === parserVersion && record[1] === 'needs_review' && record[2] < retryLimit).length,
       retryDue: records.filter(record => record?.[0] === parserVersion && processingDue(record, parserVersion, now)).length,
       retryExhausted: records.filter(record => record?.[0] === parserVersion && record[1] === 'needs_review' && record[2] >= retryLimit).length,
-      reprocessPending: records.filter(record => !record || record[0] !== parserVersion).length };
+      reprocessPending: records.filter(record => !record || record[0] !== parserVersion && !reviewedNonBilling(record)).length };
   }
-  return { merge, validProcessingRecord, processingDue, nextProcessingRecord, summarizeProcessing };
+  return { merge, validProcessingRecord, processingDue, nextProcessingRecord, summarizeProcessing, sourceFingerprint, reviewSource };
 }
 
 // Platform adapters are injected. Financial state is saved only after a whole
 // bounded page was read successfully; failures preserve the prior checkpoint.
-export function createWebSync({ gmail, store, extract, hash, clock = () => new Date().toISOString(), onProgress = () => {}, parserVersion = '3' }) {
+export function createWebSync({ gmail, store, extract, hash, clock = () => new Date().toISOString(), onProgress = () => {}, parserVersion = '4' }) {
   let running = false;
   const { billingExcerpt, canonicalJSON: canonical } = createLedgerContracts();
-  const sourceMerger = createSourceEvidenceMerger({ preserveReceiptVerification, billingExcerpt });
+  const sourceMerger = createSourceEvidenceMerger({ preserveReceiptVerification, billingExcerpt, hash });
   const { validProcessingRecord, processingDue, nextProcessingRecord, summarizeProcessing } = sourceMerger;
   if (typeof parserVersion !== 'string' || !parserVersion.trim() || parserVersion.length > 24) throw new Error('A bounded parser version is required');
   // Compact tuples keep source bookkeeping below the host's document limit:
@@ -179,7 +207,7 @@ export function createWebSync({ gmail, store, extract, hash, clock = () => new D
       for (const [i, id] of batch.entries()) {
         onProgress('reading', i + 1, batch.length);
         const prior = processing[id];
-        let message, parsed, reason = null;
+        let message, parsed, reason = null, sourceReview = null;
         try {
           message = await gmail.message(id);
           readCount++;
@@ -195,10 +223,11 @@ export function createWebSync({ gmail, store, extract, hash, clock = () => new D
           reason = message ? 'extraction_failed' : 'read_failed';
         }
         if (!reason) {
-          const result = sourceMerger.merge({ events: merged, message, parsed, parserVersion });
-          newEvents.push(...result.newEvents); reason = result.reason;
+          const result = sourceMerger.merge({ events: merged, message, parsed, parserVersion, processingRecord:prior,
+            sourceDigest:prior?.length===7?await sourceMerger.sourceFingerprint(message):null });
+          newEvents.push(...result.newEvents); reason = result.reason; sourceReview = result.sourceReview || null;
         }
-        processing[id] = nextProcessingRecord(prior, { parserVersion, now, reason });
+        processing[id] = nextProcessingRecord(prior, { parserVersion, now, reason, sourceReview });
         known.add(id);
       }
       const remaining=fresh.filter(id => !known.has(id));

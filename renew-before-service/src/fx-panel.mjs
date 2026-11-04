@@ -7,17 +7,17 @@ export function mountFxPanel({ root, runtime, totals, unconfirmedPayments = 0, l
   let lang = language, result = null, busy = false;
   const client = runtime.createRatesClient({ storage });
   const words = {
-    en: { title: 'Your recorded spending', scope: 'All inspected receipts · refunds listed separately', display: 'Display in', total: 'Estimated total', partial: 'Estimated subtotal',
+    en: { title: 'Your recorded spending', scope: 'Dated receipt payments · refunds listed separately', display: 'Display in', total: 'Estimated total', partial: 'Estimated subtotal',
       refresh: 'Update rates', updating: 'Updating rates…', original: 'Original amounts', pending: 'Loading reference rates…', empty: 'No confirmed payments recorded',
       unavailable: 'Rates are unavailable. Original amounts are still shown below.', identity: 'No conversion is needed for these known amounts.', cached: 'Using saved reference rates.',
       offline: 'Could not update rates; using the last saved reference rates.', stale: 'These reference rates are more than 7 days old.',
-      missing: 'Missing exchange rates for', excluded: 'payments need a currency and are not included.',
+      missing: 'Missing exchange rates for', excluded: 'payments need date, amount, currency or source verification and are not included.',
       note: 'Converted using the latest daily reference rates. Card settlement amounts and fees may differ.', date: 'Reference date', source: 'Source' },
-    zh: { title: '已記錄的訂閱支出', scope: '所有已核對收據・退款另列', display: '統一顯示幣別', total: '估算總額', partial: '估算小計',
+    zh: { title: '已記錄的訂閱支出', scope: '付款日期明確的收據・退款另列', display: '統一顯示幣別', total: '估算總額', partial: '估算小計',
       refresh: '更新匯率', updating: '更新匯率中…', original: '原幣金額', pending: '載入參考匯率中…', empty: '尚無已確認的付款紀錄',
       unavailable: '暫時無法取得匯率，原幣金額仍保留在下方。', identity: '目前已知金額不需要換匯。', cached: '使用已儲存的參考匯率。',
       offline: '無法更新匯率，暫用上次儲存的參考匯率。', stale: '這份參考匯率已超過 7 天。',
-      missing: '以下幣別缺少匯率', excluded: '筆付款需確認幣別，未計入。',
+      missing: '以下幣別缺少匯率', excluded: '筆付款的日期、金額、幣別或來源仍需確認，未計入。',
       note: '依最新每日參考匯率估算；信用卡實際換匯金額與手續費可能不同。', date: '匯率日期', source: '來源' }
   };
   const t = key => words[lang][key];
