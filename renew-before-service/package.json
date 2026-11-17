@@ -16,7 +16,9 @@
     "package:claude-web": "node scripts/package-claude-web.mjs",
     "package:skill": "node scripts/package-skill.mjs",
     "view": "node scripts/subscription-view.mjs",
-    "sample": "node scripts/sample.mjs"
+    "sample": "node scripts/sample.mjs",
+    "agent:mcp": "node src/agent-mcp.mjs",
+    "dashboard": "node src/agent-dashboard.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.4.0",

@@ -5,6 +5,7 @@ export function createCashflowRuntime() {
   const currencies = new Set(Intl.supportedValuesOf('currency'));
   const day = value => typeof value === 'string' && /^20\d{2}-\d{2}-\d{2}$/.test(value)
     && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
+  const belongsToMonth=(value,month)=>month===null||day(value)&&value.slice(0,7)===month;
   const add = (totals, amount) => {
     const total = (totals[amount.currency] || 0) + amount.minor;
     if (!Number.isSafeInteger(total)) throw new Error('Recorded total exceeds the safe amount range');
@@ -16,12 +17,13 @@ export function createCashflowRuntime() {
     const scopedConfirmations=confirmationEventIds===null?paymentConfirmations:Object.fromEntries(Object.entries(paymentConfirmations).filter(([id])=>confirmationEventIds.includes(id)));
     const manual=confirmations.resolve(snapshot,scopedConfirmations),superseded=new Set(manual.supersededIds);
     const totals = {}, sourceTotals = {}, userTotals = {}, refunds = {}, months = new Set(), excluded = [], included = [], confirmedPayments = [];
+    let unallocatedCount=0;
     const visit = (event, refund) => {
       if(!refund&&(superseded.has(event.id)||(event.duplicateEvidenceIds||[]).some(id=>superseded.has(id))))return;
       const amount = refund ? event.refund : event.payment;
       const date = refund ? event.refundDay : event.paymentDay;
       const basis = refund ? event.refundDateBasis : event.paymentDateBasis;
-      const trusted=event.authenticated===true||event.userVerified===true||(trustConnectorReads&&event.sourceFormat==='claude_plaintext'&&typeof event.sourceReadAt==='string'&&Number.isFinite(Date.parse(event.sourceReadAt)));
+      const trusted=event.authenticated===true||event.userVerified===true||(trustConnectorReads&&['connector_plaintext','claude_plaintext'].includes(event.sourceFormat)&&typeof event.sourceReadAt==='string'&&Number.isFinite(Date.parse(event.sourceReadAt)));
       const held=event.sourceProcessingConflict===true||event.candidateStatus==='needs_review'||event.importStatus==='needs_source_recheck';
       const recorded=event.kind===(refund?'refund_recorded':'payment_succeeded');
       let reason = !trusted ? 'unverified_source'
@@ -32,10 +34,12 @@ export function createCashflowRuntime() {
         : !currencies.has(amount.currency) ? 'currency_unknown'
         : !day(date) || basis !== 'explicit' ? 'payment_date_unknown' : null;
       if (!refund && !reason) confirmedPayments.push(event);
+      if(reason==='payment_date_unknown')unallocatedCount++;
       if(trusted&&!held&&recorded&&day(date)&&basis==='explicit'){
         months.add(date.slice(0,7));
         if(month&&date.slice(0,7)!==month)return;
       }
+      if(month&&(!day(date)||basis!=='explicit'||date.slice(0,7)!==month))return;
       if (reason) { excluded.push({ id: event.id, serviceKey: event.serviceKey, refund, reason }); return; }
       add(refund ? refunds : totals, amount);
       if(!refund)add(sourceTotals,amount);
@@ -57,18 +61,18 @@ export function createCashflowRuntime() {
     // invoice pending merely because a different month is selected.
     const matched = invoice => !invoice.conflict && confirmedPayments.some(payment =>
       invoice.serviceKey === payment.serviceKey
-      && ['accountRef','lineItemRef'].every(key => (invoice[key] ?? null) === (payment[key] ?? null))
-      && ['reference','transactionRef'].every(key => !invoice[key] || !payment[key] || invoice[key] === payment[key])
+      && !confirmations.distinctDocumentRecords(invoice,payment)
+      && ['accountRef','subscriptionRef','lineItemRef'].every(key => (invoice[key] ?? null) === (payment[key] ?? null))
+      && ['reference','transactionRef'].every(key => key==='reference'&&invoice.transactionRef&&invoice.transactionRef===payment.transactionRef||!invoice[key] || !payment[key] || invoice[key] === payment[key])
       && (invoice.transactionRef && invoice.transactionRef === payment.transactionRef
         || invoice.reference && invoice.reference === payment.reference
         || invoice.messageId && invoice.messageId === payment.messageId)
       && Number.isSafeInteger(invoice.invoiceAmount?.minor)
-      && invoice.invoiceAmount.minor === payment.payment.minor
-      && invoice.invoiceAmount.currency === payment.payment.currency);
+      && invoice.invoiceAmount.minor === payment.payment.minor && invoice.invoiceAmount.currency === payment.payment.currency);
     const invoiceNotifications = (snapshot.unclassifiedPurchases || []).filter(event => event.kind === 'unclassified_purchase'
       && event.sourceRequiresDocumentReview && (event.sourceFact === 'invoice_notification'
         || event.providerKey === 'openai' && event.issuerDomain === 'tax.openai.com'));
-    const pendingInvoices = [...new Map([...(snapshot.invoices || []),...invoiceNotifications].map(event=>[event.id,event])).values()].filter(invoice => !superseded.has(invoice.id)&&!(invoice.duplicateEvidenceIds||[]).some(id=>superseded.has(id))&&!matched(invoice))
+    const pendingInvoices = [...new Map([...(snapshot.invoices || []),...invoiceNotifications].map(event=>[event.id,event])).values()].filter(invoice => belongsToMonth(invoice.invoiceDay,month)&&!superseded.has(invoice.id)&&!(invoice.duplicateEvidenceIds||[]).some(id=>superseded.has(id))&&!matched(invoice))
       .map(invoice => ({...invoice, cashflowType:'unverified_invoice', reviewReason:invoice.conflict ? 'conflicting_amount'
         : !Number.isSafeInteger(invoice.invoiceAmount?.minor) ? 'amount_unknown'
         : !currencies.has(invoice.invoiceAmount?.currency) ? 'currency_unknown' : 'payment_unverified'}));
@@ -81,7 +85,7 @@ export function createCashflowRuntime() {
       confirmationConflicts:manual.conflicts,
       months: [...months].sort().reverse(), included, excluded, pendingInvoices,
       basis: manual.rows.length?'recorded_payment_period':'receipt_payment_date', bankReconciled: false,
-      exhaustive: false, unallocatedCount: excluded.filter(x => x.reason === 'payment_date_unknown').length };
+      exhaustive: false, unallocatedCount };
   }
   return { summarize };
 }

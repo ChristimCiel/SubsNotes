@@ -84,6 +84,17 @@ npm start
 
 開啟 http://127.0.0.1:4183/，以 Ctrl+C 停止。範例不會覆寫既有資料；本機報告是唯讀。［[其他使用方式](guide/zh-TW/how-it-works.md#其他使用方式)］
 
+## 本機檔案帳本
+
+在原始碼目錄中，可開啟既有的私人帳本資料夾：
+
+```sh
+npm run dashboard -- --data-dir /path/to/private-ledger --read-only
+```
+
+使用 `npm run agent:mcp -- --data-dir /path/to/private-ledger`，讓助理連到同一個資料夾。預設為唯讀；`--allow-proposals` 只開放有來源依據的提案，不開放付款確認。開啟或重新整理畫面不會掃描 Gmail，也不會匯入其他使用者資料夾或 Claude Artifact。
+
+
 ## 原始碼目錄
 
 **Renew Before** 是專案早期名稱。SubsNotes 為了相容既有使用方式，保留這些原始碼資料夾名稱及原有 App／儲存識別碼。

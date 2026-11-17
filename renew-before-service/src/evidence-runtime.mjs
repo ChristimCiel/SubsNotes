@@ -18,6 +18,18 @@ function parseDay(value) {
   }
   const yearFirst = value.match(/\b(20\d{2})\/(\d{1,2})\/(\d{1,2})\b/);
   if (yearFirst) return parseDay(`${yearFirst[1]}-${yearFirst[2].padStart(2,'0')}-${yearFirst[3].padStart(2,'0')}`);
+  const yearLast = value.match(/\b(\d{1,2})\/(\d{1,2})\/(20\d{2}|\d{2})\b/);
+  if (yearLast) {
+    // Try both orders. A short year follows the existing 2000–2099 scope;
+    // receiving dates and vendor locale never resolve a day/month ambiguity.
+    const [, first, second, rawYear] = yearLast;
+    const year = rawYear.length === 2 ? `20${rawYear}` : rawYear;
+    const candidates = new Set([
+      parseDay(`${year}-${first.padStart(2, '0')}-${second.padStart(2, '0')}`),
+      parseDay(`${year}-${second.padStart(2, '0')}-${first.padStart(2, '0')}`)
+    ].filter(Boolean));
+    return candidates.size === 1 ? [...candidates][0] : null;
+  }
   const named = value.match(/\b([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(20\d{2})\b/);
   if (named) {
     const month = MONTHS[named[1].slice(0, 3).toLowerCase()];
@@ -109,7 +121,13 @@ function issuer(message) {
     ['mintmobile.com', 'mint-mobile', 'Mint Mobile'], ['perplexity.ai', 'perplexity', 'Perplexity']
   ];
   if (from('cloudflare.com')) {
-    const name = (subject + ' ' + text).match(/\b([a-z0-9-]+\.(?:com|co|io|net|org|ai|app|dev))\b/i)?.[1];
+    const domainToken='([a-z0-9-]+\\.(?:com|co|io|net|org|ai|app|dev))';
+    // Provider/help URLs are not the customer's registered domain.
+    const explicit=[subject.match(new RegExp('\\b'+domainToken+'\\b','i'))?.[1],
+      text.match(new RegExp('Domain Name:\\s*'+domainToken+'\\b','i'))?.[1],
+      text.match(new RegExp('^\\s*-\\s*'+domainToken+'\\b','im'))?.[1]];
+    const names=[...new Set(explicit.filter(name=>name&&!/(?:^|\.)cloudflare\.(?:com|net)$/i.test(name)).map(name=>name.toLowerCase()))];
+    const name=names.length===1?names[0]:null;
     return { key: `cloudflare:${name?.toLowerCase() || 'unknown-domain'}`, name: name ? `Cloudflare · ${name}` : 'Cloudflare Registrar', category: 'Domains', domain };
   }
   if (domain === 'paddle.com' || domain.endsWith('.paddle.com')) {
@@ -202,6 +220,7 @@ function extractEvidence(input) {
   const event = (kind, evidence, extra = {}) => ({ ...base, id: digest(message.id + '|' + kind + '|v1'), kind, evidence: billingExcerpt(evidence), ...extra });
   const hint = currencyHint(text);
   if(service.key==='cloudflare:unknown-domain')return /invoice|eGUI|發票/i.test(subject)?[event('unclassified_purchase','Cloudflare invoice notification without an identified domain or amount. Review the invoice before linking it to a subscription.',{sourceRequiresDocumentReview:true,providerKey:'cloudflare'})]:[];
+  if(service.key.startsWith('cloudflare:')&&/Your Domains Have Expired/i.test(text))return [event('access_expired','The registrar explicitly reports that this domain has expired. The scheduled deletion date is not the expiry or billing date.',{accessEnds:null,sourceFact:'registrar_expired'})];
   if (service.key === 'openai-unknown-product') return [event('unclassified_purchase', 'OpenAI prepared a tax invoice. The email body does not identify the product, amount or payment status. Review the invoice document before linking it to ChatGPT or API usage.', { sourceRequiresDocumentReview: true, providerKey: 'openai' })];
   if (service.key === 'ezpay:unknown-merchant') {
     const invoiceAmount=afterMoney(text,'發票金額|invoice amount',hint);
@@ -316,9 +335,8 @@ function extractEvidence(input) {
     return [event('subscription_confirmed', nextBilling ? `ChatGPT records a monthly plan change starting ${nextBilling}.` : 'ChatGPT confirms a monthly subscription. The next exact billing date is not stated.', { nextBilling, plan: /Plus/.test(text) ? 'ChatGPT Plus' : null, recurringRate, cadence: 'monthly' })];
   }
   if (service.key === 'mint-mobile' && /AUTO RENEWAL:\s*Not Active/i.test(text)) {
-    const date = text.match(/RENEWAL DATE:\s*(\d{2})\/(\d{2})\/(\d{2}|20\d{2})\b/i);
-    const year = date && (date[3].length === 2 ? '20' + date[3] : date[3]);
-    const accessEnds = date ? parseDay(`${year}-${date[1]}-${date[2]}`) : null;
+    const phrase=text.match(/(?:RENEWAL DATE|EXPIRATION DATE):\s*([^\n]{6,45})/i)?.[1];
+    const accessEnds=parseDay(phrase);
     return [event('renewal_disabled', `Mint Mobile says auto renewal is not active.${accessEnds ? ' Recorded plan end: ' + accessEnds : ''}`, { accessEnds })];
   }
   if (service.key === 'microsoft-365' && /訂閱(?:已|即將)到期/.test(subject)) {
@@ -371,7 +389,7 @@ function extractEvidence(input) {
   const nextAmount = text.match(new RegExp('will renew at\\s*(' + MONEY_PATTERN + ')','i'))?.[1];
   const cancelBy = parseDay(text.match(/unless you cancel by\s+([^.!\n]{6,40})/i)?.[1]);
   const reference = text.match(/Invoice (?:number|#)\s*([A-Z0-9-]+)/i)?.[1] ?? text.match(/Receipt (?:number|#)\s*([A-Z0-9-]+)/i)?.[1];
-  const paymentDay = parseDay(text.match(/\bPaid\s+([A-Za-z]+\s+\d{1,2},?\s+20\d{2}|20\d{2}-\d{2}-\d{2})/)?.[1]
+  const paymentDay = parseDay(text.match(/\bPaid\s+(?:on\s+)?([A-Za-z]+\s+\d{1,2},?\s+20\d{2}|20\d{2}-\d{2}-\d{2})/)?.[1]
     || (completedChinesePayment?text.match(/付款時間\s*[:：]?\s*(20\d{2}\/\d{1,2}\/\d{1,2})/)?.[1]:null));
   const purchasedAccessEnds = completedChinesePayment ? parseDay(text.match(/權益到期\s*[:：]?\s*(20\d{2}\/\d{1,2}\/\d{1,2})/)?.[1]) : null;
   const events = [];
@@ -410,8 +428,8 @@ function projectEvidence(events, { asOf = new Date().toISOString(), coverage = n
   const ordered = [...unique.values()].filter(event=>!conflicts.has(event.id)).sort((a, b) => a.receivedAt.localeCompare(b.receivedAt) || a.id.localeCompare(b.id));
   // Existing identities are untouched. New explicit references add scope only;
   // an invoice ID alone cannot distinguish two partial refunds or line items.
-  const scope = event => event.accountRef ? event.serviceKey + '|account:' + encodeURIComponent(event.accountRef) : event.serviceKey;
-  const transactionKey = (event, refund = false) => scope(event) + '|' + (refund && event.refundRef ? 'refund:' + encodeURIComponent(event.refundRef) : event.transactionRef ? 'transaction:' + encodeURIComponent(event.transactionRef) : event.reference || event.messageId) + (event.lineItemRef ? '|line:' + encodeURIComponent(event.lineItemRef) : '');
+  const scope = event => contracts.serviceScope(event);
+  const transactionKey = (event, refund = false) => scope(event) + '|' + (refund && event.refundRef ? 'refund:' + encodeURIComponent(event.refundRef) : event.transactionRef ? 'transaction:' + encodeURIComponent(event.transactionRef) : event.reference || (event.sourceDocument?.recordKey ? 'document-record:' + event.sourceDocument.recordKey : event.messageId)) + (event.lineItemRef ? '|line:' + encodeURIComponent(event.lineItemRef) : '');
   const mergeTransaction = (previous, incoming, field, dateField, basisField) => {
     if (!previous) return incoming;
     const oldAmount = previous[field], nextAmount = incoming[field];
@@ -444,7 +462,7 @@ function projectEvidence(events, { asOf = new Date().toISOString(), coverage = n
   const heldEvidence = events.filter(event=>conflicts.has(event.id)).map(event=>({...event,holdReason:'conflicting_event_identity'}));
   const refunds = new Map();
   for (const event of ordered) {
-    if (event.sourceProcessingConflict === true || event.candidateStatus === 'needs_review' || event.importStatus === 'needs_source_recheck' || event.authenticated !== true && event.userVerified !== true && !(trustConnectorReads === true && event.sourceFormat === 'claude_plaintext' && typeof event.sourceReadAt === 'string' && Number.isFinite(Date.parse(event.sourceReadAt)))) { heldEvidence.push(event); continue; }
+    if (event.sourceProcessingConflict === true || event.candidateStatus === 'needs_review' || event.importStatus === 'needs_source_recheck' || event.authenticated !== true && event.userVerified !== true && !(trustConnectorReads === true && ['connector_plaintext','claude_plaintext'].includes(event.sourceFormat) && typeof event.sourceReadAt === 'string' && Number.isFinite(Date.parse(event.sourceReadAt)))) { heldEvidence.push(event); continue; }
     if (event.kind === 'invoice_recorded') {
       const key = transactionKey(event);
       invoices.set(key, mergeTransaction(invoices.get(key), event, 'invoiceAmount', 'invoiceDay', 'invoiceDateBasis'));
@@ -470,9 +488,9 @@ function projectEvidence(events, { asOf = new Date().toISOString(), coverage = n
     }
     const groupKey = scope(event);
     const group = groups.get(groupKey) ?? {
-      serviceKey: groupKey, providerServiceKey:event.serviceKey, name: event.service, category: event.category,
+      serviceKey: groupKey, providerServiceKey:event.serviceKey, accountRef:event.accountRef||null, subscriptionRef:event.subscriptionRef||null, lineItemRef:event.lineItemRef||null, name: event.service, category: event.category,
       renewal: 'unknown', accessEnds: null, accessEndsAt:null, nextBilling: null, nextBillingAt:null, nextCharge: null,
-      plan: null, recurringRate: null, lastInvoice: null, cadence: null, latestSourceAt: null,
+      plan: event.plan||null, recurringRate: null, lastInvoice: null, cadence: null, latestSourceAt: null,
       renewalSourceAt: null, unresolvedPaymentProblem: null, evidenceIds: [], warnings: []
     };
     group.latestSourceAt = event.receivedAt;

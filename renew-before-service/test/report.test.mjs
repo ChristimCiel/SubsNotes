@@ -87,6 +87,30 @@ test('report transaction proof retains every source used to enrich a deduplicate
   assert.equal(app.elements.get('detail').open,true);
 });
 
+test('source amounts remain visible without payment dates and never become spending totals',()=>{
+  const snapshot=projectEvidence([],{asOf:'2026-11-02T10:00:00Z',coverage:{messageCount:0}});
+  snapshot.amountSummaryMode='source_evidence';
+  snapshot.subscriptions=[
+    {serviceKey:'fictional-invoice',name:'Invoice plan',status:'needs_verification',recordedAmounts:[{basis:'invoice',amount:{currency:'EUR',minor:3700},note:'Payment day unknown'}]},
+    {serviceKey:'fictional-rate',name:'Quoted plan',status:'needs_verification',recordedAmounts:[{basis:'rate',amount:{currency:null,minor:1800,source:'$18'},note:'Currency not stated'}]},
+    {serviceKey:'fictional-free',name:'Trial plan',status:'needs_verification',recordedAmountStatus:'free_entitlement'},
+    {serviceKey:'fictional-unknown',name:'Unknown plan',status:'needs_verification'}
+  ];
+  const html=renderReport(snapshot,[]),saved=JSON.parse(html.match(/<script id="report-data" type="application\/json">([\s\S]*?)<\/script>/)[1]),app=mountReport(html);
+  const rows=app.elements.get('list').innerHTML;
+  assert.match(rows,/Invoice amount.*EUR.*37\.00/);
+  assert.match(rows,/Payment day unknown/);
+  assert.match(rows,/Stated plan price.*\$18.*currency unconfirmed/);
+  assert.match(rows,/Free \/ trial entitlement; no paid amount established/);
+  assert.match(rows,/Source does not state an amount/);
+  assert.deepEqual(saved.cashflow.paidMinorByCurrency,{});
+  assert.match(app.elements.get('paid-summary').innerHTML,/not added together as paid spending/);
+  app.elements.get('language').listeners.click();
+  assert.match(app.elements.get('list').innerHTML,/發票金額.*EUR.*37\.00/);
+  assert.match(app.elements.get('list').innerHTML,/方案報價.*\$18.*幣別待確認/);
+  assert.equal(app.networkCalls,0);
+});
+
 test('private preview is read-only, uncached, frame-isolated and rejects unknown hosts', async () => {
   const server = createReportServer({ html: '<html><script>void 0;</script></html>' });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -117,4 +141,10 @@ test('reloading the preview reads the latest saved report and its matching CSP',
     assert.match(await next.text(), /Updated/);
     assert.notEqual(next.headers.get('content-security-policy'), firstCsp);
   } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
+test('unknown coverage remains unknown in a renderable report snapshot',()=>{
+ const snapshot={asOf:'2026-11-18T00:00:00Z',coverage:null,subscriptions:[],payments:[],refunds:[],invoices:[],oneTimePurchases:[],otherRecurringPayments:[],unclassifiedPurchases:[],heldEvidence:[],excludedServices:[]};
+ const html=renderReport(snapshot,[]),match=html.match(/<script\b(?=[^>]*\bid="report-data")[^>]*>([\s\S]*?)<\/script>/);
+ assert.ok(match);const saved=JSON.parse(match[1]);assert.deepEqual(saved.snapshot.coverage,{});assert.equal(snapshot.coverage,null);assert.equal(saved.snapshot.coverage.messageCount,undefined);
 });

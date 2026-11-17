@@ -5,15 +5,16 @@ import { createLedgerContracts } from './ledger-contracts.mjs';
 // merge. Dependencies are explicit so the same function runs in the Artifact.
 export function createSourceEvidenceMerger({ preserveReceiptVerification, billingExcerpt, hash = null }) {
   if (typeof preserveReceiptVerification !== 'function' || typeof billingExcerpt !== 'function') throw new Error('Source merge dependencies are required');
-  const family = event => ['payment_succeeded', 'one_time_purchase', 'wallet_top_up', 'unclassified_purchase'].includes(event.kind) ? 'payment'
+  const family = event => event.kind==='invoice_recorded'||event.kind==='unclassified_purchase'&&event.sourceFact==='invoice_notification'?'invoice'
+    : ['payment_succeeded', 'one_time_purchase', 'wallet_top_up', 'unclassified_purchase'].includes(event.kind) ? 'payment'
     : ['refund_recorded', 'refund_pending'].includes(event.kind) ? 'refund' : null;
-  const sameTransaction = (a, b) => ['accountRef', 'lineItemRef', 'transactionRef', 'refundRef'].every(key => (a[key] ?? null) === (b[key] ?? null));
+  const sameTransaction = (a, b) => ['accountRef', 'subscriptionRef', 'lineItemRef', 'transactionRef', 'refundRef'].every(key => (a[key] ?? null) === (b[key] ?? null));
   const reviewed = event => Array.isArray(event.receiptVerification?.fields) && event.receiptVerification.fields.length > 0 && Number.isFinite(Date.parse(event.receiptVerification.checkedAt));
   function contradicts(previous, incoming) {
-    const key = family(incoming), old = previous[key], next = incoming[key];
+    const category=family(incoming),key=category==='invoice'?'invoiceAmount':category, old = previous[key], next = incoming[key];
     if (old?.minor !== undefined && next?.minor !== undefined && old.minor !== next.minor) return true;
     if (old?.currency && next?.currency && old.currency !== next.currency) return true;
-    const dateKey = key === 'refund' ? 'refundDay' : 'paymentDay';
+    const dateKey = key === 'refund' ? 'refundDay' : key==='invoiceAmount'?'invoiceDay':'paymentDay';
     return !!(previous[dateKey] && incoming[dateKey] && previous[dateKey] !== incoming[dateKey]);
   }
   function unresolvedReason(message, events) {
@@ -28,6 +29,7 @@ export function createSourceEvidenceMerger({ preserveReceiptVerification, billin
         if (!Number.isSafeInteger(event.invoiceAmount?.minor)) return 'amount_unknown';
         if (!event.invoiceAmount?.currency || event.currencyAmbiguous) return 'currency_unknown';
         if (!event.invoiceDay) return 'invoice_date_unknown';
+        continue;
       }
       const key = family(event);
       if (key && !Number.isSafeInteger(event[key]?.minor)) return 'amount_unknown';
@@ -61,7 +63,7 @@ export function createSourceEvidenceMerger({ preserveReceiptVerification, billin
         subject: billingExcerpt(event.subject, { maxLength: 200 }), evidence: billingExcerpt(event.evidence),
         attachmentCount: message.attachmentCount || 0, attachmentContentRead: false,
         bodyFormat: message.bodyFormat || 'plain_text', bodyTruncated: !!message.truncated, senderAuthenticationAvailable: false });
-      if (previousRecord && (previousRecord.messageId !== event.messageId || previousRecord.serviceKey !== record.serviceKey || !sameTransaction(previousRecord, event))) {
+      if (previousRecord && (previousRecord.messageId !== event.messageId || previousRecord.serviceKey !== record.serviceKey || !sameTransaction(previousRecord, record))) {
         // A reused ID must not move facts or document proof to another account,
         // line item or service. Keep the original identity and hold the reread.
         if (!reviewed(previousRecord)) events.set(previousRecord.id, { ...previousRecord, sourceProcessingConflict: true });

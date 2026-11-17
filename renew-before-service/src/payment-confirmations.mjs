@@ -12,10 +12,30 @@ export function createPaymentConfirmationRuntime() {
   const instant = value => typeof value === 'string' && day(value.slice(0,10)) && /T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value));
   const localDay = value => {const parts=new Intl.DateTimeFormat('en',{year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(value));return ['year','month','day'].map(k=>parts.find(p=>p.type===k).value).join('-');};
   const amountValid = value => object(value) && Number.isSafeInteger(value.minor) && value.minor >= 0 && currencies.has(value.currency) && Object.keys(value).every(k=>['minor','currency'].includes(k));
-  const identityKeys = ['serviceKey','accountRef','lineItemRef'];
-  const optionalIdentity = ['accountRef','lineItemRef','transactionRef','refundRef','reference'];
+  const identityKeys = ['serviceKey','accountRef','subscriptionRef','lineItemRef'];
+  const optionalIdentity = ['accountRef','subscriptionRef','lineItemRef','transactionRef','refundRef','reference'];
+  function validateDocumentSource(value) {
+    if(!object(value)||Object.keys(value).some(k=>!['attachmentId','sha256','page','parserVersion','recordKey','start','end'].includes(k))
+      ||typeof value.attachmentId!=='string'||!value.attachmentId.trim()||value.attachmentId.length>2048||/[\u0000-\u001f\u007f]/.test(value.attachmentId)
+      ||!/^[a-f0-9]{64}$/.test(value.sha256)||!Number.isSafeInteger(value.page)||value.page<1||value.page>40
+      ||!/^[a-z0-9.-]{1,64}$/.test(value.parserVersion))throw new Error('Invalid document provenance');
+    if(['recordKey','start','end'].some(k=>Object.hasOwn(value,k))&&(!/^[a-f0-9]{64}$/.test(value.recordKey)
+      ||!Number.isSafeInteger(value.start)||!Number.isSafeInteger(value.end)||value.start<0||value.start>=value.end||value.end>200_000))throw new Error('Invalid document record provenance');
+    return clone(value);
+  }
+  function distinctDocumentRecords(a,b) {
+    const x=a.sourceDocument,y=b.sourceDocument;
+    if(!x?.recordKey||!y?.recordKey||x.recordKey===y.recordKey)return false;
+    // Explicit financial identities still control duplicate reconciliation.
+    if(['transactionRef','refundRef','reference'].some(k=>a[k]&&a[k]===b[k]))return false;
+    // Changed bytes at the same original source location are a conflict, not
+    // a newly discovered transaction. Legacy records keep their old matching.
+    if(a.messageId===b.messageId&&x.attachmentId===y.attachmentId&&x.page===y.page&&x.start===y.start&&x.end===y.end)return false;
+    return true;
+  }
   function same(a,b) {
     return identityKeys.every(k=>(a[k]??null)===(b[k]??null))
+      && !distinctDocumentRecords(a,b)
       && ['reference','transactionRef'].every(k=>!a[k]||!b[k]||a[k]===b[k])
       && (a.id===b.id || (a.duplicateEvidenceIds||[]).includes(b.id) || (b.duplicateEvidenceIds||[]).includes(a.id)
         || a.messageId===b.messageId || a.reference&&a.reference===b.reference || a.transactionRef&&a.transactionRef===b.transactionRef);
@@ -23,11 +43,13 @@ export function createPaymentConfirmationRuntime() {
   function snapshot(event) {
     const out={};
     for(const k of ['id','messageId','serviceKey','service','category','kind','receivedAt',...optionalIdentity])if(event[k]!=null)out[k]=event[k];
+    if(event.sourceDocument?.recordKey)out.sourceDocument=validateDocumentSource(event.sourceDocument);
     return out;
   }
   function validateSnapshot(value) {
     if(!object(value)||!['invoice_recorded','payment_succeeded'].includes(value.kind)||!instant(value.receivedAt))fail('confirmation_invalid');
-    if(Object.keys(value).some(k=>!['id','messageId','serviceKey','service','category','kind','receivedAt',...optionalIdentity].includes(k)))fail('confirmation_invalid');
+    if(Object.keys(value).some(k=>!['id','messageId','serviceKey','service','category','kind','receivedAt','sourceDocument',...optionalIdentity].includes(k)))fail('confirmation_invalid');
+    if(value.sourceDocument!=null){try{validateDocumentSource(value.sourceDocument);}catch{fail('confirmation_invalid');}}
     for(const k of ['id','messageId','serviceKey','service'])if(!token(value[k]))fail('confirmation_invalid');
     for(const k of ['category',...optionalIdentity])if(value[k]!=null&&!token(value[k]))fail('confirmation_invalid');
   }
@@ -154,5 +176,5 @@ export function createPaymentConfirmationRuntime() {
     }
     return {rows,supersededIds:[...supersededIds],conflicts};
   }
-  return {validate,set,remove,undo,get,record,revision,history,parseAmount,resolve,validateTransition};
+  return {validate,set,remove,undo,get,record,revision,history,parseAmount,resolve,validateTransition,validateDocumentSource,distinctDocumentRecords};
 }

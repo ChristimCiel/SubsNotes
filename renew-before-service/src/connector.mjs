@@ -4,7 +4,7 @@ import { decodeGmailMessage } from './gmail.mjs';
 // never from an assistant's guessed sender or a text-only receipt extract.
 export function fromConnectorMessage(message, mailboxEmail) {
   if (!message?.id) throw new Error('A complete Gmail message ID is required');
-  // Claude's native web connector returns a flat plaintext message, not MIME.
+  // Some host connectors return a flat plaintext message instead of MIME.
   // It does not expose receiving-server authentication headers: keep that fact
   // unknown rather than treating a familiar sender as authenticated.
   if (Object.hasOwn(message, 'plaintextBody')) {
@@ -16,7 +16,7 @@ export function fromConnectorMessage(message, mailboxEmail) {
       id: message.id, sender: message.sender, subject: message.subject,
       receivedAt: new Date(message.date).toISOString(),
       text: bytes.subarray(0, 256_000).toString('utf8'), mailboxEmail,
-      authenticatedSenderDomain: null, sourceFormat: 'claude_plaintext',
+      authenticatedSenderDomain: null, sourceFormat: 'connector_plaintext',
       attachmentCount: Array.isArray(message.attachments) ? message.attachments.length : 0,
       truncated: bytes.length > 256_000
     };

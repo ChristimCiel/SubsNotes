@@ -21,6 +21,8 @@
     "package:confirmation-demo": "npm run package:claude-web && node renew-before-service/scripts/package-confirmation-demo.mjs",
     "package:skill": "npm --prefix renew-before-service run package:skill",
     "view": "npm --prefix renew-before-service run view --",
-    "cache:logos": "node renew-before-service/scripts/cache-service-logos.mjs"
+    "cache:logos": "node renew-before-service/scripts/cache-service-logos.mjs",
+    "agent:mcp": "node renew-before-service/src/agent-mcp.mjs",
+    "dashboard": "node renew-before-service/src/agent-dashboard.mjs"
   }
 }
