@@ -39,6 +39,9 @@ export function createLedgerContracts() {
     if (value == null) return;
     if (!object(value) || !Number.isSafeInteger(value.minor) || value.minor < 0 || (value.currency !== null && !currencies.has(value.currency))) throw new Error('Invalid ' + name);
   };
+  function documentSource(value) {
+    return confirmations.validateDocumentSource(value);
+  }
   // Store only allowlisted billing clauses, never an arbitrary email prefix.
   // Removing a clause is preferable to retaining a customer's greeting/address.
   function billingExcerpt(input, {maxLength = 650} = {}) {
@@ -49,7 +52,7 @@ export function createLedgerContracts() {
       .replace(/\b(?:\d[ -]?){12,18}\d\b/g,'[number removed]')
       .replace(/\b(?:visa|mastercard|amex|card|payment method)[^\n.!?。]{0,45}(?:ending\s+(?:in\s+)?|[x*·-]{2,})\s*\d{4}\b/gi,'[payment method removed]');
     const moneyToken = new RegExp('(?:\\b(?:' + [...currencies].join('|') + ')\\b|NT\\$|US\\$|CA\\$|AU\\$|[$€£])\\s*\\d[\\d,.]*','g');
-    const dateToken = /\b20\d{2}-\d{2}-\d{2}\b|\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2}(?:–\d{1,2})?,?\s+20\d{2}\b|20\d{2}年\s*\d{1,2}月\s*\d{1,2}日/gi;
+    const dateToken = /\b20\d{2}-\d{2}-\d{2}\b|\b\d{1,2}\/\d{1,2}\/(?:20\d{2}|\d{2})\b|\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2}(?:–\d{1,2})?,?\s+20\d{2}\b|20\d{2}年\s*\d{1,2}月\s*\d{1,2}日/gi;
     const labels = /\b(?:amount paid|total paid|total refunded(?: without credit note)?|refunded on|refund (?:requested|approved|recorded|processed)|payment (?:failed|declined|successful)|invoice (?:amount|date)|next (?:charge|billing)|billing (?:period|cycle)|trial (?:ends|end)|auto[- ]?renew(?:al)?\s+(?:is\s+)?(?:off|on|disabled|enabled)|subscription(?:\s+(?:has|also|been|was|is|will|successfully)){0,5}\s+(?:cancelled|canceled|confirmed|expires|renew)|membership(?:\s+(?:has|also|been|was|is|will|successfully)){0,5}\s+(?:cancelled|canceled|end)|access (?:ends|expires|paused)|cancellation confirmed)\b|實付金額|總付款金額|總計|退款(?:已完成|待確認)?|下次扣款日|自動續(?:訂|約|費)(?:已)?(?:關閉|停用|開啟)|訂閱已取消|付款失敗|訂閱到期日/gi;
     const pieces = [];
     for (const clause of scrubbed.split(/\r?\n|[;。!?]|\.(?!\d)(?:\s+|$)/)) {
@@ -97,6 +100,7 @@ export function createLedgerContracts() {
       text(event.id,'event identity'); text(event.messageId,'message identity');
       text(event.serviceKey,'service identity'); text(event.service,'service name',300);
       if (!kinds.has(event.kind) || !instant(event.receivedAt)) throw new Error('Invalid source record kind or time');
+      if (event.sourceDocument != null) documentSource(event.sourceDocument);
       for (const field of ['payment','refund','recurringRate','nextCharge','invoiceAmount']) amount(event[field],field);
       for (const field of ['paymentDay','refundDay','invoiceDay','nextBilling','accessEnds','trialEnds','cancelBy']) if (event[field] != null && !day(event[field])) throw new Error('Invalid ' + field);
       for (const field of ['sourceReadAt','nextBillingAt','accessEndsAt']) if(event[field]!=null&&!instant(event[field]))throw new Error('Invalid '+field);
@@ -113,30 +117,42 @@ export function createLedgerContracts() {
   // Exact source quotes bind a proposal to text; they do not verify semantics.
   function validateCandidate(candidate, {observation, expectedMailboxHash = null} = {}) {
     if (!object(candidate) || candidate.schemaVersion !== 1 || !object(observation)) throw new Error('A versioned candidate and actual source observation are required');
-    for (const key of ['authenticated','userVerified','receiptVerification','sourceFormat','sourceReadAt','senderAuthenticationAvailable','paymentConfirmations','paymentConfirmation']) if (Object.hasOwn(candidate,key)) throw new Error('Candidates cannot supply source authority');
+    for (const key of ['authenticated','userVerified','receiptVerification','verificationHistory','sourceFormat','sourceReadAt','senderAuthenticationAvailable','paymentConfirmations','paymentConfirmation']) if (Object.hasOwn(candidate,key)) throw new Error('Candidates cannot supply source authority');
     text(observation.messageId,'observed message identity'); text(observation.text,'observed source text',1_000_000);
     if (!instant(observation.observedAt) || !instant(observation.receivedAt)) throw new Error('Observed source times are required');
     if (candidate.messageId !== observation.messageId) throw new Error('Candidate does not match the observed message');
     if (expectedMailboxHash && observation.mailboxHash !== expectedMailboxHash) throw new Error('Candidate source belongs to another mailbox');
     if (!kinds.has(candidate.kind)) throw new Error('Unsupported candidate kind');
+    let sourceDocument=null;
+    if(observation.document!=null){
+      if(!object(observation.document)||Object.keys(observation.document).some(key=>!['sha256','page','parserVersion','recordKey','start','end'].includes(key)))throw new Error('Invalid document provenance');
+      sourceDocument=documentSource({...observation.document,attachmentId:observation.attachmentId});
+    }
     const allowed = new Set(['serviceKey','service','category','kind','payment','paymentDay','paymentDateBasis','refund','refundDay','refundDateBasis','invoiceAmount','invoiceDay','period','cadence','recurringRate','nextCharge','nextBilling','accessEnds','trialEnds','cancelBy','plan','reference','accountRef','lineItemRef','transactionRef','refundRef']);
     const record = {}, evidence = {};
     for (const key of Object.keys(candidate)) {
       if (['schemaVersion','messageId','fieldEvidence'].includes(key)) continue;
       if (!allowed.has(key)) throw new Error('Unsupported candidate field: ' + key);
-      if (candidate[key] == null) { record[key] = null; continue; }
       const proof = candidate.fieldEvidence?.[key];
+      // Unknown values remain null. A supplied original quote still explains
+      // the uncertainty and must pass the same source-match checks.
+      if (candidate[key] == null && proof == null) { record[key] = null; continue; }
       if (!object(proof) || typeof proof.quote !== 'string' || !proof.quote.trim() || proof.quote.length > 1000 || !observation.text.includes(proof.quote)) throw new Error('Candidate field is not backed by observed source text: ' + key);
       if (proof.attachmentId != null && proof.attachmentId !== observation.attachmentId) throw new Error('Candidate attachment does not match the source read');
+      if(proof.currencyQuote!=null&&(typeof proof.currencyQuote!=='string'||!proof.currencyQuote.trim()||proof.currencyQuote.length>1000||!observation.text.includes(proof.currencyQuote)))throw new Error('Candidate currency is not backed by observed source text');
       record[key] = JSON.parse(canonicalJSON(candidate[key]));
       // Persist only billing excerpts, not the whole source quote or body.
-      evidence[key] = {excerpt:billingExcerpt(proof.quote,{maxLength:220})};
+      const currencyCode=proof.currencyQuote?.match(/^(?:currency|billing currency|幣別|貨幣)\s*[:：]?\s*([A-Z]{3})$/i)?.[1]?.toUpperCase();
+      evidence[key] = {excerpt:billingExcerpt(proof.quote,{maxLength:220}),...(proof.currencyQuote?{currencyExcerpt:currencyCode&&currencies.has(currencyCode)?'Currency '+currencyCode:billingExcerpt(proof.currencyQuote,{maxLength:100})}:{}),...(sourceDocument?{sourceDocument}: {})};
     }
     text(record.serviceKey,'candidate service identity'); text(record.service,'candidate service name',300);
-    const candidateKey=[candidate.messageId,record.kind,record.refundRef||record.transactionRef||record.lineItemRef||''].map(value=>encodeURIComponent(value)).join(':');
+    const candidateKey=(sourceDocument
+      ? sourceDocument.recordKey ? ['document-record',candidate.messageId,sourceDocument.recordKey,record.kind] : ['document',candidate.messageId,sourceDocument.sha256,sourceDocument.page,record.kind]
+      : [candidate.messageId,record.kind,record.refundRef||record.transactionRef||record.lineItemRef||'']).map(value=>encodeURIComponent(value)).join(':');
     const event = {...record,id:'candidate:' + candidateKey,messageId:observation.messageId,receivedAt:observation.receivedAt,
       authenticated:false,userVerified:false,sourceFormat:'assistant_candidate',sourceReadAt:null,
       candidateStatus:'needs_review',candidateObservedAt:observation.observedAt,fieldEvidence:evidence,
+      ...(sourceDocument?{sourceDocument}:{}),
       evidence:billingExcerpt(Object.values(candidate.fieldEvidence || {}).map(p=>p.quote || '').join('\n'))};
     validateCanonicalState({version:1,events:[event]});
     return event;
@@ -156,6 +172,7 @@ export function createLedgerContracts() {
     if(state.paymentConfirmations){state.importedPaymentConfirmations=state.paymentConfirmations;delete state.paymentConfirmations;}
     for (const event of state.events) {
       if (event.receiptVerification) {event.importedReceiptVerification=event.receiptVerification;delete event.receiptVerification;}
+      if (event.verificationHistory) {event.importedVerificationHistory=event.verificationHistory;delete event.verificationHistory;}
       event.authenticated=false; event.userVerified=false; event.sourceFormat='portable_import'; event.sourceReadAt=null;
       event.importStatus='needs_source_recheck';
     }
@@ -165,5 +182,5 @@ export function createLedgerContracts() {
     return {state,requiresSourceRecheck:true,integrityVerified:true,sourceAuthenticityVerified:false};
   }
   const revisionContract = state => ({schemaVersion:1,revision:state?.storageRevision || null,legacySavedAt:state?.storageRevision ? null : state?.savedAt || null,persisted:Boolean(state?.storageRevision)});
-  return {canonicalJSON,billingExcerpt,expandCheckpointMetadata,compactCheckpointMetadata,validateCanonicalState,validateCandidate,createPortableExport,importPortableExport,revisionContract};
+  return {canonicalJSON,billingExcerpt,expandCheckpointMetadata,compactCheckpointMetadata,validateCanonicalState,validateCandidate,createPortableExport,importPortableExport,revisionContract,distinctDocumentRecords:confirmations.distinctDocumentRecords};
 }

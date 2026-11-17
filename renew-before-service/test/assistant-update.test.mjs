@@ -113,9 +113,15 @@ test('both entrypoints preserve the original identity when a reread changes or o
     const extract=async message=>(await extractWebEvidence(message)).map(event=>({...event,...(nextAccount?{accountRef:nextAccount}:{})}));
     const result=await compareEntryPoints(state,paidReply,extract);
     const preserved=result.state.events.find(event=>event.id===original.id),candidate=result.state.events.find(event=>event.id!==original.id);
-    assert.equal(result.state.events.length,2);
     assert.equal(preserved.accountRef,'first-account');
     assert.equal(preserved.payment.minor,2400);
+    if(proof&&!nextAccount){
+      assert.equal(result.state.events.length,1,'a weaker reread retains the reviewed account instead of inventing a second transaction');
+      assert.deepEqual(preserved.receiptVerification,original.receiptVerification);
+      assert.equal(result.state.sourceProcessing[paidReply.id][1],'extracted');
+      continue;
+    }
+    assert.equal(result.state.events.length,2);
     assert.equal(candidate.accountRef,nextAccount);
     assert.equal(candidate.sourceProcessingConflict,true);
     assert.equal(candidate.receiptVerification,undefined,'source proof must never move across account identities');

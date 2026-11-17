@@ -207,3 +207,7 @@ export function createClaudePersonalStore(db, uid, { hash, revision = () => cryp
   const save=state=>persist(state,false),saveUserConfirmations=state=>persist(state,true);
   return {load,save,saveUserConfirmations,concurrency:conditionalCommit?'conditional_commit':'single_writer',getRevision:async()=>{const doc=await manifest.get();if(doc?.metadata?.hasPendingWrites)throw new Error('The saved index has not reached storage yet');return version(doc?.exists?doc.data():null);}};
 }
+
+// Public neutral name; the original export and persisted document IDs remain
+// compatible with existing Claude bundles and user ledgers.
+export const createLedgerStore = createClaudePersonalStore;

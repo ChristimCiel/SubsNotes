@@ -39,7 +39,7 @@ export function createSubscriptionActivityRuntime() {
     for (const event of byId.values()) {
       if (!kinds.has(event.kind) || !event.serviceKey || ['Donations','One-time purchases','Unclassified'].includes(event.category)) continue;
       const trusted = event.authenticated === true || event.userVerified === true || trustConnectorReads === true
-        && event.sourceFormat === 'claude_plaintext' && instant(event.sourceReadAt);
+        && ['connector_plaintext','claude_plaintext'].includes(event.sourceFormat) && instant(event.sourceReadAt);
       if (!trusted || !instant(event.receivedAt)) { rejectedCount++; continue; }
       const key = canonicalScopes.get(event.id) || scope(event);
       if (!groups.has(key)) groups.set(key,{serviceKey:key,providerServiceKey:event.serviceKey,name:event.service || event.serviceKey,events:[]});

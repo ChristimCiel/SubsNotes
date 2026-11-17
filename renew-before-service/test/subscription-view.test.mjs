@@ -1,3 +1,4 @@
+import {createSubsNotesBrandRuntime} from '../src/brand-assets.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
@@ -18,8 +19,9 @@ test('the read view uses actual payment-month cashflow, preserving annual charge
   const july = build(events,{month:'2026-07'});
   assert.deepEqual(july.totals.paidMinorByCurrency,{USD:14400});
   assert.deepEqual(july.rows[0].paidMinorByCurrency,{USD:14400});
-  assert.equal(july.totals.excludedPayments,1);
-  assert.equal(july.rows[0].excludedPayments,1);
+  assert.equal(july.totals.excludedPayments,0,'undated evidence cannot be assigned to July');
+  assert.equal(july.rows[0].excludedPayments,0);
+  assert.equal(build(events).totals.excludedPayments,1,'the undated record remains in all history');
   assert.deepEqual(build(events,{month:'2026-08'}).totals.paidMinorByCurrency,{});
   assert.equal(july.totals.bankReconciled,false);
   assert.equal(july.coverage.exhaustive,false);
@@ -180,7 +182,7 @@ test('inline fragments reuse the same dated records and controls without a docum
 
 test('inline rendering remains escaped and read-only when the shared factories are embedded in a host', () => {
   const snapshot = build([receipt('inline-hostile',{service:'<script>alert(1)</script>',plan:'<img src=x onerror=alert(1)>'})]);
-  const embedded = vm.runInNewContext(createI18nRuntime.toString()+';('+createSubscriptionViewRuntime.toString()+')()');
+  const embedded = vm.runInNewContext(createSubsNotesBrandRuntime.toString()+';'+createI18nRuntime.toString()+';('+createSubscriptionViewRuntime.toString()+')()');
   const html = embedded.renderInlineHTML(snapshot);
   assert.match(html,/&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
   assert.doesNotMatch(html,/<img src=x|<script>alert\(1\)/);

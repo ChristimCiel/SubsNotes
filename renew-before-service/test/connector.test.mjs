@@ -25,7 +25,7 @@ test('Claude web plaintext responses preserve facts without inventing header aut
   assert.equal(result.authenticatedSenderDomain, null);
   assert.equal(result.userVerified, undefined);
   assert.equal(result.attachmentCount, 1);
-  assert.equal(result.sourceFormat, 'claude_plaintext');
+  assert.equal(result.sourceFormat, 'connector_plaintext');
   assert.match(result.text, /Amount paid/);
   assert.throws(() => fromConnectorMessage({ id: 'summary-only', plaintextBody: 'paid' }), /complete plaintext/);
 });
