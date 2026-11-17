@@ -25,7 +25,7 @@ jobs:
       - run: node --check renew-before-demo/dist/confirmations.js
       - run: npm run package:skill
   macos:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - run: swift test
