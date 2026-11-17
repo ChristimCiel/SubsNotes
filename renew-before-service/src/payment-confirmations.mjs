@@ -12,8 +12,8 @@ export function createPaymentConfirmationRuntime() {
   const instant = value => typeof value === 'string' && day(value.slice(0,10)) && /T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value));
   const localDay = value => {const parts=new Intl.DateTimeFormat('en',{year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(value));return ['year','month','day'].map(k=>parts.find(p=>p.type===k).value).join('-');};
   const amountValid = value => object(value) && Number.isSafeInteger(value.minor) && value.minor >= 0 && currencies.has(value.currency) && Object.keys(value).every(k=>['minor','currency'].includes(k));
-  const identityKeys = ['serviceKey','accountRef','lineItemRef'];
-  const optionalIdentity = ['accountRef','lineItemRef','transactionRef','refundRef','reference'];
+  const identityKeys = ['serviceKey','accountRef','subscriptionRef','lineItemRef'];
+  const optionalIdentity = ['accountRef','subscriptionRef','lineItemRef','transactionRef','refundRef','reference'];
   function validateDocumentSource(value) {
     if(!object(value)||Object.keys(value).some(k=>!['attachmentId','sha256','page','parserVersion','recordKey','start','end'].includes(k))
       ||typeof value.attachmentId!=='string'||!value.attachmentId.trim()||value.attachmentId.length>2048||/[\u0000-\u001f\u007f]/.test(value.attachmentId)

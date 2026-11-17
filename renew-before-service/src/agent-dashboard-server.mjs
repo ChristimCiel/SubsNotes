@@ -1,3 +1,4 @@
+import {MAX_SCOPED_SERVICE_KEY_LENGTH} from './ledger-contracts.mjs';
 import {createServer} from 'node:http';
 import {createHash,randomBytes,timingSafeEqual} from 'node:crypto';
 
@@ -78,7 +79,7 @@ export async function createAgentDashboardServer({access,html,allowUserEdits=fal
           if(args.view!==undefined&&!['payments','invoices','history'].includes(args.view)||args.month!==undefined&&!/^20\d{2}-(?:0[1-9]|1[0-2])$/.test(args.month))fail('agent_billing_query_invalid');
         }else if(url.pathname==='/api/subscriptions'){queries(url,['month','offset','limit']);method='listSubscriptions';args=pagination(url);if(url.searchParams.has('month')){args.month=url.searchParams.get('month');if(!/^20\d{2}-(?:0[1-9]|1[0-2])$/.test(args.month))fail('agent_month_invalid');}}
         else if(url.pathname==='/api/evidence'){
-          queries(url,['serviceKey','month','eventId','offset','limit']);method='evidence';args=pagination(url);args.serviceKey=url.searchParams.get('serviceKey');if(typeof args.serviceKey!=='string'||!args.serviceKey||args.serviceKey.length>300)fail('agent_service_invalid');
+          queries(url,['serviceKey','month','eventId','offset','limit']);method='evidence';args=pagination(url);args.serviceKey=url.searchParams.get('serviceKey');if(typeof args.serviceKey!=='string'||!args.serviceKey||args.serviceKey.length>MAX_SCOPED_SERVICE_KEY_LENGTH)fail('agent_service_invalid');
           if(url.searchParams.has('month')){args.month=url.searchParams.get('month');if(!/^20\d{2}-(?:0[1-9]|1[0-2])$/.test(args.month))fail('agent_month_invalid');}
           if(url.searchParams.has('eventId')){args.eventId=url.searchParams.get('eventId');if(!args.eventId||args.eventId.length>500)fail('agent_evidence_query_invalid');}
         }else if(url.pathname==='/api/sync'){queries(url,[]);method='syncStatus';}

@@ -8,7 +8,7 @@ export function createSourceEvidenceMerger({ preserveReceiptVerification, billin
   const family = event => event.kind==='invoice_recorded'||event.kind==='unclassified_purchase'&&event.sourceFact==='invoice_notification'?'invoice'
     : ['payment_succeeded', 'one_time_purchase', 'wallet_top_up', 'unclassified_purchase'].includes(event.kind) ? 'payment'
     : ['refund_recorded', 'refund_pending'].includes(event.kind) ? 'refund' : null;
-  const sameTransaction = (a, b) => ['accountRef', 'lineItemRef', 'transactionRef', 'refundRef'].every(key => (a[key] ?? null) === (b[key] ?? null));
+  const sameTransaction = (a, b) => ['accountRef', 'subscriptionRef', 'lineItemRef', 'transactionRef', 'refundRef'].every(key => (a[key] ?? null) === (b[key] ?? null));
   const reviewed = event => Array.isArray(event.receiptVerification?.fields) && event.receiptVerification.fields.length > 0 && Number.isFinite(Date.parse(event.receiptVerification.checkedAt));
   function contradicts(previous, incoming) {
     const category=family(incoming),key=category==='invoice'?'invoiceAmount':category, old = previous[key], next = incoming[key];

@@ -62,7 +62,7 @@ export function createCashflowRuntime() {
     const matched = invoice => !invoice.conflict && confirmedPayments.some(payment =>
       invoice.serviceKey === payment.serviceKey
       && !confirmations.distinctDocumentRecords(invoice,payment)
-      && ['accountRef','lineItemRef'].every(key => (invoice[key] ?? null) === (payment[key] ?? null))
+      && ['accountRef','subscriptionRef','lineItemRef'].every(key => (invoice[key] ?? null) === (payment[key] ?? null))
       && ['reference','transactionRef'].every(key => key==='reference'&&invoice.transactionRef&&invoice.transactionRef===payment.transactionRef||!invoice[key] || !payment[key] || invoice[key] === payment[key])
       && (invoice.transactionRef && invoice.transactionRef === payment.transactionRef
         || invoice.reference && invoice.reference === payment.reference

@@ -1,3 +1,5 @@
+import {createLedgerContracts} from './ledger-contracts.mjs';
+const contracts=createLedgerContracts();
 // A read-only transaction view of saved evidence. Notices are not payments;
 // invoices are not paid receipts. Source verification and user confirmation
 // remain distinct; projection never grants authority to assistant proposals.
@@ -27,7 +29,7 @@ export function projectBillingRecords(state,{view='payments',month=null}={}){
     const confirmed=confirmation?.active===true;
     const resolved=resolvedSourceService(state,event);
     const matchedPayments=(state.events||[]).filter(p=>p.kind==='payment_succeeded'&&sourceVerification(p)==='source_verified'&&p.serviceKey===resolved
-      &&['accountRef','lineItemRef'].every(k=>(event[k]??null)===(p[k]??null))
+      &&['accountRef','subscriptionRef','lineItemRef'].every(k=>(event[k]??null)===(p[k]??null))
       &&['reference','transactionRef'].every(k=>k==='reference'&&event.transactionRef&&event.transactionRef===p.transactionRef||!event[k]||!p[k]||event[k]===p[k])
       &&(event.transactionRef&&event.transactionRef===p.transactionRef||event.reference&&event.reference===p.reference||event.messageId===p.messageId));
     // A receipt re-read can correct an AI-only invoice classification. An
@@ -49,7 +51,7 @@ export function projectBillingRecords(state,{view='payments',month=null}={}){
     const tokens=quote.replace(/\*\*/g,'').match(/(?:NT\$|US\$|CA\$|AU\$|[$€£])\s*\d[\d,.]*/g)||[];
     const rawToken=amount?.source,unmarked=typeof rawToken==='string'&&/^\d[\d,.]*$/.test(rawToken)&&quote.includes(rawToken)?rawToken:null;
     const linked=(state.events||[]).find(e=>e.messageId===event.messageId&&e.serviceKey===resolved&&e.id!==event.id);
-    rows.push({eventId:event.id,messageId:event.messageId,serviceKey:resolved+(event.accountRef?'::account:'+encodeURIComponent(event.accountRef):''),name:resolved!==event.serviceKey?linked?.service||event.service:event.service,
+    rows.push({eventId:event.id,messageId:event.messageId,serviceKey:contracts.serviceScope({...event,serviceKey:resolved},{separator:'::'}),name:resolved!==event.serviceKey?linked?.service||event.service:event.service,
       accountRef:event.accountRef||null,plan:event.plan||proposal?.plan||null,reference:event.reference||proposal?.reference||null,kind:confirmed?'payment_succeeded':event.kind,sourceKind:event.kind,amount,date,paymentMonth,
       alternativeEvidence:Boolean(proposal),conflictingAlternatives:distinct.size>1,
       // With unknown currency, show the source token rather than guessing a

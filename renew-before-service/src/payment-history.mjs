@@ -1,3 +1,5 @@
+import {createLedgerContracts} from './ledger-contracts.mjs';
+const contracts=createLedgerContracts();
 import {projectBillingRecords,resolvedSourceService,sourceVerification} from './billing-ledger.mjs';
 import {billingDay,belongsToBillingMonth,validateBillingMonth} from './billing-calendar.mjs';
 import {createPaymentConfirmationRuntime} from './payment-confirmations.mjs';
@@ -6,7 +8,7 @@ import {describeVerification,verificationAuditSummary} from './verification-audi
 const sourceUrl=id=>'https://mail.google.com/mail/u/0/#all/'+encodeURIComponent(id);
 const identity=createPaymentConfirmationRuntime();
 export const observedSource=e=>!e.candidateStatus&&!e.importStatus&&!e.sourceProcessingConflict&&!e.conflict&&(e.authenticated===true||['connector_plaintext','claude_plaintext'].includes(e.sourceFormat)&&Number.isFinite(Date.parse(e.sourceReadAt)));
-const sameAccount=(a,b)=>['accountRef','lineItemRef'].every(k=>(a[k]??null)===(b[k]??null));
+const sameAccount=(a,b)=>['accountRef','subscriptionRef','lineItemRef'].every(k=>(a[k]??null)===(b[k]??null));
 function sameTransaction(a,b){
   if(!a||!b||!sameAccount(a,b)||identity.distinctDocumentRecords(a,b))return false;
   if(a.transactionRef&&b.transactionRef)return a.transactionRef===b.transactionRef;
@@ -49,7 +51,7 @@ export function projectPaymentHistory(state,{month=null,paidEventIds=null}={}){
 export function projectServiceActivity(state,{asOf=new Date().toISOString(),month=null,history=projectPaymentHistory(state)}={}){
   validateBillingMonth(month);const today=billingDay(asOf),byId=new Map(state.events.map(e=>[e.id,e]));
   const paid=history.filter(r=>r.countsAsPayment),trusted=state.events.filter(observedSource),notices=[];
-  const key=e=>resolvedSourceService(state,e)+(e.accountRef?'::account:'+encodeURIComponent(e.accountRef):'');
+  const key=e=>contracts.serviceScope({...e,serviceKey:resolvedSourceService(state,e)},{separator:'::'});
   for(const e of trusted.filter(e=>['renewal_notice','subscription_confirmed'].includes(e.kind)&&e.nextBilling)){
     const due=billingDay(e.nextBilling);if(!due)continue;
     const matches=paid.filter(p=>{

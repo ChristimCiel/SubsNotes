@@ -428,7 +428,7 @@ function projectEvidence(events, { asOf = new Date().toISOString(), coverage = n
   const ordered = [...unique.values()].filter(event=>!conflicts.has(event.id)).sort((a, b) => a.receivedAt.localeCompare(b.receivedAt) || a.id.localeCompare(b.id));
   // Existing identities are untouched. New explicit references add scope only;
   // an invoice ID alone cannot distinguish two partial refunds or line items.
-  const scope = event => event.accountRef ? event.serviceKey + '|account:' + encodeURIComponent(event.accountRef) : event.serviceKey;
+  const scope = event => contracts.serviceScope(event);
   const transactionKey = (event, refund = false) => scope(event) + '|' + (refund && event.refundRef ? 'refund:' + encodeURIComponent(event.refundRef) : event.transactionRef ? 'transaction:' + encodeURIComponent(event.transactionRef) : event.reference || (event.sourceDocument?.recordKey ? 'document-record:' + event.sourceDocument.recordKey : event.messageId)) + (event.lineItemRef ? '|line:' + encodeURIComponent(event.lineItemRef) : '');
   const mergeTransaction = (previous, incoming, field, dateField, basisField) => {
     if (!previous) return incoming;
@@ -488,9 +488,9 @@ function projectEvidence(events, { asOf = new Date().toISOString(), coverage = n
     }
     const groupKey = scope(event);
     const group = groups.get(groupKey) ?? {
-      serviceKey: groupKey, providerServiceKey:event.serviceKey, name: event.service, category: event.category,
+      serviceKey: groupKey, providerServiceKey:event.serviceKey, accountRef:event.accountRef||null, subscriptionRef:event.subscriptionRef||null, lineItemRef:event.lineItemRef||null, name: event.service, category: event.category,
       renewal: 'unknown', accessEnds: null, accessEndsAt:null, nextBilling: null, nextBillingAt:null, nextCharge: null,
-      plan: null, recurringRate: null, lastInvoice: null, cadence: null, latestSourceAt: null,
+      plan: event.plan||null, recurringRate: null, lastInvoice: null, cadence: null, latestSourceAt: null,
       renewalSourceAt: null, unresolvedPaymentProblem: null, evidenceIds: [], warnings: []
     };
     group.latestSourceAt = event.receivedAt;

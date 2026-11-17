@@ -16,8 +16,9 @@ test('legacy receipt identities stay stable and duplicate invoice receipts still
 test('explicit line items and account scopes add identity without rekeying old records',()=>{
   const events=[payment('line-one',{lineItemRef:'seat-one'}),payment('line-two',{lineItemRef:'seat-two'}),payment('other-account',{accountRef:'opaque-account-two'})];
   const result=projectEvidence(events,{asOf});
-  assert.equal(result.recordedPaidMinorByCurrency.USD,6000);assert.equal(result.payments.length,3);assert.equal(result.subscriptions.length,2);
-  assert.ok(result.subscriptions.some(s=>s.serviceKey==='fixture-service'));
+  assert.equal(result.recordedPaidMinorByCurrency.USD,6000);assert.equal(result.payments.length,3);assert.equal(result.subscriptions.length,3);
+  assert.ok(result.subscriptions.some(s=>s.serviceKey==='fixture-service|instance:line%3Aseat-one'));
+  assert.ok(result.subscriptions.some(s=>s.serviceKey==='fixture-service|instance:line%3Aseat-two'));
   assert.ok(result.subscriptions.some(s=>s.serviceKey==='fixture-service|account:opaque-account-two'));
   assert.deepEqual(events.map(e=>e.id),['line-one','line-two','other-account']);
 });

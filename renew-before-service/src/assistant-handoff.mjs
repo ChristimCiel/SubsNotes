@@ -104,12 +104,12 @@ export function createAssistantHandoffRuntime() {
     const proposal=validateResult(result,{request,expectedMailboxHash:mailbox||null});
     const review=state.assistantReview??[];
     if(!Array.isArray(review)||review.length>5000)throw new Error('Unsupported assistant review history');
-    const factKeys=['serviceKey','service','category','kind','payment','paymentDay','paymentDateBasis','refund','refundDay','refundDateBasis','invoiceAmount','invoiceDay','period','cadence','recurringRate','nextCharge','nextBilling','accessEnds','trialEnds','cancelBy','plan','reference','accountRef','lineItemRef','transactionRef','refundRef'];
+    const factKeys=['serviceKey','service','category','kind','payment','paymentDay','paymentDateBasis','refund','refundDay','refundDateBasis','invoiceAmount','invoiceDay','period','cadence','recurringRate','nextCharge','nextBilling','accessEnds','trialEnds','cancelBy','plan','reference','accountRef','subscriptionRef','lineItemRef','transactionRef','refundRef'];
     const facts=value=>Object.fromEntries(factKeys.filter(key=>value[key]!=null).map(key=>[key,value[key]]));
     const sameFacts=(candidate,existing)=>Object.entries(facts(candidate)).every(([key,value])=>contracts.canonicalJSON(value)===contracts.canonicalJSON(existing[key]??null));
-    const sameAccount=(a,b)=>['accountRef','lineItemRef'].every(key=>(a[key]??null)===(b[key]??null));
+    const sameAccount=(a,b)=>['accountRef','subscriptionRef','lineItemRef'].every(key=>(a[key]??null)===(b[key]??null));
     const compatibleReferences=(a,b)=>['reference','transactionRef','refundRef'].every(key=>!a[key]||!b[key]||a[key]===b[key]);
-    const sameSource=(a,b)=>!contracts.distinctDocumentRecords(a,b)&&(a.id===b.id||a.messageId===b.messageId&&a.kind===b.kind&&sameAccount(a,b)&&compatibleReferences(a,b));
+    const sameSource=(a,b)=>!contracts.distinctDocumentRecords(a,b)&&(a.id===b.id||a.serviceKey===b.serviceKey&&a.messageId===b.messageId&&a.kind===b.kind&&sameAccount(a,b)&&compatibleReferences(a,b));
     const confirmationSources=Object.values(state.paymentConfirmations||{}).map(entry=>entry.source);
     const protectedSource=(a,b)=>!contracts.distinctDocumentRecords(a,b)&&a.serviceKey===b.serviceKey&&sameAccount(a,b)&&compatibleReferences(a,b)&&(a.id===b.id||a.messageId===b.messageId||a.reference&&a.reference===b.reference||a.transactionRef&&a.transactionRef===b.transactionRef);
     const events=[...state.events],conflicts=[];

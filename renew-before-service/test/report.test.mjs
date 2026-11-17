@@ -142,3 +142,9 @@ test('reloading the preview reads the latest saved report and its matching CSP',
     assert.notEqual(next.headers.get('content-security-policy'), firstCsp);
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
+
+test('unknown coverage remains unknown in a renderable report snapshot',()=>{
+ const snapshot={asOf:'2026-11-18T00:00:00Z',coverage:null,subscriptions:[],payments:[],refunds:[],invoices:[],oneTimePurchases:[],otherRecurringPayments:[],unclassifiedPurchases:[],heldEvidence:[],excludedServices:[]};
+ const html=renderReport(snapshot,[]),match=html.match(/<script\b(?=[^>]*\bid="report-data")[^>]*>([\s\S]*?)<\/script>/);
+ assert.ok(match);const saved=JSON.parse(match[1]);assert.deepEqual(saved.snapshot.coverage,{});assert.equal(snapshot.coverage,null);assert.equal(saved.snapshot.coverage.messageCount,undefined);
+});

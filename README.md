@@ -84,6 +84,17 @@ npm start
 
 Open http://127.0.0.1:4183/ and stop with Ctrl+C. The sample refuses to overwrite existing data. The local report is read-only. [Other ways to use SubsNotes →](guide/en/how-it-works.md#other-ways-to-use-subsnotes)
 
+## Local file-backed ledger
+
+From a source checkout, open an existing private ledger directory:
+
+```sh
+npm run dashboard -- --data-dir /path/to/private-ledger --read-only
+```
+
+Use `npm run agent:mcp -- --data-dir /path/to/private-ledger` for the assistant endpoint over the same directory. It is read-only by default; `--allow-proposals` enables source-backed proposals, not payment confirmations. Opening or refreshing the viewer does not scan Gmail or import another profile or Claude Artifact.
+
+
 ## Source layout
 
 **Renew Before** is the earlier project name. SubsNotes retains those source-folder names and existing app/storage identifiers for compatibility.

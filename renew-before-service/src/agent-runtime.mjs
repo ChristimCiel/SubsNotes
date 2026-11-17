@@ -1,5 +1,5 @@
 import {createAssistantScanRuntime} from './assistant-scan.mjs';
-import {createLedgerContracts} from './ledger-contracts.mjs';
+import {createLedgerContracts,MAX_SCOPED_SERVICE_KEY_LENGTH} from './ledger-contracts.mjs';
 import {createEvidenceRuntime} from './evidence-runtime.mjs';
 import {createCashflowRuntime} from './cashflow.mjs';
 import {getAgentContract,getAgentCapabilities} from './agent-contract.mjs';
@@ -7,6 +7,7 @@ import {projectBillingRecords,sourceVerification,resolvedSourceService} from './
 import {projectPaymentHistory,projectServiceActivity,observedSource} from './payment-history.mjs';
 import {BILLING_TIME_ZONE,belongsToBillingMonth} from './billing-calendar.mjs';
 import {describeVerification,verificationAuditSummary} from './verification-audit.mjs';
+import {projectLedgerIdentities} from './ledger-identities.mjs';
 
 // Host-neutral application API. Storage and host permissions are injected.
 // There is deliberately no model SDK, mailbox client, HTTP listener or UI SDK.
@@ -23,7 +24,7 @@ export function createAgentRuntime({store,requestStorage,ownerBinding,hash,clock
     if(matches.length!==1)return true;
     const e=matches[0];
     for(const field of ['payment','refund','invoiceAmount','recurringRate','nextCharge'])if(c[field]&&e[field]&&(c[field].minor!==e[field].minor||c[field].currency&&e[field].currency&&c[field].currency!==e[field].currency))return true;
-    for(const field of ['paymentDay','refundDay','invoiceDay','reference','accountRef','lineItemRef','transactionRef','refundRef'])if(c[field]!=null&&e[field]!=null&&c[field]!==e[field])return true;
+    for(const field of ['paymentDay','refundDay','invoiceDay','reference','accountRef','subscriptionRef','lineItemRef','transactionRef','refundRef'])if(c[field]!=null&&e[field]!=null&&c[field]!==e[field])return true;
     if(c.plan&&e.plan&&!e.plan.toLowerCase().includes(c.plan.toLowerCase()))return true;
     return false;
   });
@@ -32,11 +33,11 @@ export function createAgentRuntime({store,requestStorage,ownerBinding,hash,clock
     return {items:rows.slice(offset,offset+limit),total:rows.length,nextOffset:offset+limit<rows.length?offset+limit:null};
   }
   function inventory(state,snapshot) {
-    const groups=new Map(snapshot.subscriptions.map(s=>{const serviceKey=s.serviceKey.replace('|account:','::account:');return [serviceKey,{...s,serviceKey,discovery:'established_evidence',currentStatusVerified:false,knownAmounts:[],sourceEventIds:[...s.evidenceIds,...(s.relatedEvidenceIds||[])]}];}));
+    const groups=new Map(snapshot.subscriptions.map(s=>{const serviceKey=s.serviceKey.replace('|account:','::account:').replace('|instance:','::instance:').replace('|line:','::line:');return [serviceKey,{...s,serviceKey,discovery:'established_evidence',currentStatusVerified:false,knownAmounts:[],sourceEventIds:[...s.evidenceIds,...(s.relatedEvidenceIds||[])]}];}));
     for(const e of snapshot.heldEvidence){
       if(['one_time_purchase','wallet_top_up'].includes(e.kind))continue;
       // Provisional rows never make claims about paid totals or active access.
-      const key=resolvedSourceService(state,e)+(e.accountRef?'::account:'+encodeURIComponent(e.accountRef):'');
+      const key=contracts.serviceScope({...e,serviceKey:resolvedSourceService(state,e)},{separator:'::'});
       if(!groups.has(key))groups.set(key,{serviceKey:key,providerServiceKey:e.serviceKey,name:e.service,accountRef:e.accountRef||null,discovery:'needs_review',status:'needs_verification',currentStatusVerified:false,renewal:'unknown',access:'unknown',knownAmounts:[],sourceEventIds:[]});
       const row=groups.get(key);if(!row.sourceEventIds.includes(e.id))row.sourceEventIds.push(e.id);
       for(const field of ['payment','invoiceAmount','recurringRate','nextCharge'])if(e[field])row.knownAmounts.push({kind:field,amount:e[field],evidenceId:e.id,verified:false});
@@ -69,18 +70,22 @@ export function createAgentRuntime({store,requestStorage,ownerBinding,hash,clock
   function financialView(state,snapshot,month=null){
     const all=cashflow.summarize(snapshot,{trustConnectorReads:true,paymentConfirmations:state.paymentConfirmations});
     const paidEventIds=new Set(all.included.filter(e=>e.cashflowType!=='provider_refund').flatMap(e=>[e.id,...(e.duplicateEvidenceIds||[])]));
-    const history=projectPaymentHistory(state,{paidEventIds}),activity=projectServiceActivity(state,{asOf:snapshot.asOf,history});
+    const rawHistory=projectPaymentHistory(state,{paidEventIds}),identityIndex=projectLedgerIdentities(state,{history:rawHistory});
+    const identityByEvent=new Map(identityIndex.eventLinks.map(link=>[link.eventId,link]));
+    const history=rawHistory.map(row=>({...row,ledgerIdentity:identityByEvent.get(row.eventId)||null,
+      documents:row.documents.map(doc=>({...doc,documentId:identityByEvent.get(doc.eventId)?.documentId||null}))}));
+    const activity=projectServiceActivity(state,{asOf:snapshot.asOf,history});
     const inMonth=history.filter(r=>month===null||(r.paymentMonth||r.documentMonth)===month);
     const complete=inMonth.filter(r=>r.countsAsPayment||r.status==='refunded');
     const serviceKeys=new Set(complete.map(r=>r.serviceKey));
     const ids=new Set(complete.flatMap(r=>r.documents.map(d=>d.eventId)));
     for(const n of activity.notices)if(serviceKeys.has(n.serviceKey)&&belongsToBillingMonth(n.date,month))ids.add(n.eventId);
-    for(const e of state.events)if(observedSource(e)&&serviceKeys.has(e.serviceKey+(e.accountRef?'::account:'+encodeURIComponent(e.accountRef):''))
+    for(const e of state.events)if(observedSource(e)&&serviceKeys.has(contracts.serviceScope(e,{separator:'::'}))
       &&(e.kind==='payment_failed'&&belongsToBillingMonth(e.paymentDay,month)||['renewal_disabled','access_expired','access_expiring'].includes(e.kind)&&belongsToBillingMonth(e.accessEnds,month)))ids.add(e.id);
     const services=inventory(state,snapshot).filter(s=>month===null||serviceKeys.has(s.serviceKey)).map(s=>{
       const payment=complete.filter(r=>r.serviceKey===s.serviceKey&&r.countsAsPayment).at(-1);
       const status=activity.statuses.get(s.serviceKey)||{statusCode:'unverified',statusEvidenceIds:[],currentStatusVerified:false,renewalNotices:[],outstandingRenewalCount:0};
-      return {...s,...status,status:{confirmed_active:'paid_access',confirmed_canceled:'renewal_off',expired:'expired',payment_issue:'payment_problem',unverified:'needs_verification'}[status.statusCode],month,periodPaymentCount:complete.filter(r=>r.serviceKey===s.serviceKey&&r.countsAsPayment).length,
+      return {...s,...status,ledgerIdentity:identityByEvent.get(s.sourceEventIds[0])||null,status:{confirmed_active:'paid_access',confirmed_canceled:'renewal_off',expired:'expired',payment_issue:'payment_problem',unverified:'needs_verification'}[status.statusCode],month,periodPaymentCount:complete.filter(r=>r.serviceKey===s.serviceKey&&r.countsAsPayment).length,
         latestPeriodPayment:payment?{amount:payment.amount,date:payment.date,month:payment.paymentMonth,confirmed:payment.confirmed}:null,
         latestPeriodTransaction:complete.filter(r=>r.serviceKey===s.serviceKey).at(-1)||null,
         nextBilling:status.renewalNotices.filter(n=>n.outstanding&&belongsToBillingMonth(n.date,month)).at(-1)?.date||null,
@@ -106,7 +111,7 @@ export function createAgentRuntime({store,requestStorage,ownerBinding,hash,clock
   }
   async function listSubscriptions({month=null,...options}={}){if(month!==null&&!/^20\d{2}-(?:0[1-9]|1[0-2])$/.test(month))fail('agent_month_invalid');const state=await load();return {ledgerRevision:state.storageRevision||null,month,...servicePage(financialView(state,projection(state),month).services,options)};}
   async function evidence({serviceKey,eventId=null,month=null,offset=0,limit=50}={}) {
-    if(typeof serviceKey!=='string'||!serviceKey||serviceKey.length>300)fail('agent_service_invalid');
+    if(typeof serviceKey!=='string'||!serviceKey||serviceKey.length>MAX_SCOPED_SERVICE_KEY_LENGTH)fail('agent_service_invalid');
     const state=await load(),rows=inventory(state,projection(state)),row=rows.find(r=>r.serviceKey===serviceKey);
     if(month!==null&&!/^20\d{2}-(?:0[1-9]|1[0-2])$/.test(month)||eventId!==null&&(typeof eventId!=='string'||!eventId||eventId.length>500))fail('agent_evidence_query_invalid');
     const view=financialView(state,projection(state),month),transaction=eventId?view.inMonth.find(r=>r.eventId===eventId&&r.serviceKey===serviceKey):null;

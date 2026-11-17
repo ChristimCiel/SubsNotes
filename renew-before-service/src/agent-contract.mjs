@@ -13,7 +13,7 @@ export function getAgentContract() {
   const properties={schemaVersion:{const:1},messageId:bounded,serviceKey:bounded,service:{...bounded,maxLength:300},category:bounded,kind:{enum:kinds},fieldEvidence:{type:'object',additionalProperties:ref('fieldEvidence')}};
   for(const key of ['payment','refund','invoiceAmount','recurringRate','nextCharge'])properties[key]=ref('money');
   for(const key of ['paymentDay','refundDay','invoiceDay','nextBilling','accessEnds','trialEnds','cancelBy'])properties[key]=day;
-  for(const key of ['accountRef','lineItemRef','transactionRef','refundRef','reference','plan'])properties[key]=bounded;
+  for(const key of ['accountRef','subscriptionRef','lineItemRef','transactionRef','refundRef','reference','plan'])properties[key]=bounded;
   for(const key of ['paymentDateBasis','refundDateBasis'])properties[key]={enum:['explicit','unknown']};
   properties.cadence={enum:['monthly','annual']};
   properties.period={type:'object',additionalProperties:false,required:['start','end'],properties:{start:day,end:day}};
