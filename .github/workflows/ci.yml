@@ -24,6 +24,8 @@ jobs:
       - run: npm run package:confirmation-demo
       - run: node --check renew-before-demo/dist/confirmations.js
       - run: npm run package:skill
+      - run: npm ci --prefix subsnotes-v1
+      - run: npm test --prefix subsnotes-v1
   macos:
     runs-on: macos-14
     steps:

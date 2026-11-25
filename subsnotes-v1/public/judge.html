@@ -233,6 +233,36 @@
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
+
+    .progress-container {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      margin: 20px 0;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: #e2e8f0;
+      border-radius: 4px;
+      overflow: hidden;
+      margin: 15px 0;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+      transition: width 0.5s ease;
+      border-radius: 4px;
+    }
+
+    .progress-text {
+      text-align: center;
+      color: #667eea;
+      font-weight: 600;
+      margin-top: 10px;
+    }
   </style>
 </head>
 <body>
@@ -313,6 +343,14 @@
           </div>
         </div>
 
+        <div class="progress-container" id="progressContainer" style="display: none;">
+          <h3 style="margin-bottom: 10px;">Running Demo...</h3>
+          <div class="progress-bar">
+            <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+          </div>
+          <div class="progress-text" id="progressText">Initializing...</div>
+        </div>
+
         <button class="btn" onclick="runDemo()" id="runBtn" data-i18n="runButton">
           🚀 Run Complete Demo
         </button>
@@ -378,11 +416,22 @@
 
     window.runDemo = async function() {
       const btn = document.getElementById('runBtn');
+      const progressContainer = document.getElementById('progressContainer');
+      const progressFill = document.getElementById('progressFill');
+      const progressText = document.getElementById('progressText');
+      
       btn.disabled = true;
-      btn.textContent = currentLang === 'en' ? '⏳ Running demo...' : '⏳ 執行中...';
+      btn.style.display = 'none';
+      progressContainer.style.display = 'block';
+
+      function updateProgress(percent, text) {
+        progressFill.style.width = percent + '%';
+        progressText.textContent = text;
+      }
 
       try {
-        // Step 1: Initialize
+        // Step 1: Initialize (20%)
+        updateProgress(20, currentLang === 'en' ? 'Initializing budget...' : '初始化預算中...');
         demoData = createJudgeData();
         const summary = getBudgetSummary(demoData.budget);
         
@@ -393,7 +442,8 @@
 
         await sleep(500);
 
-        // Step 2: Recommendations
+        // Step 2: Recommendations (40%)
+        updateProgress(40, currentLang === 'en' ? 'Generating recommendations...' : '生成推薦中...');
         const recommendations = generateJudgeRecommendations(demoData.subscriptions, demoData.budget);
         
         const recHtml = recommendations.slice(0, 3).map((rec, i) => `
@@ -417,7 +467,8 @@
 
         await sleep(500);
 
-        // Step 3: Mandate
+        // Step 3: Mandate (60%)
+        updateProgress(60, currentLang === 'en' ? 'Creating mandate...' : '建立授權中...');
         const topRec = recommendations[0];
         const futureDate = new Date();
         futureDate.setDate(futureDate.getDate() + 7);
@@ -442,7 +493,8 @@
 
         await sleep(500);
 
-        // Step 4: Execute
+        // Step 4: Execute (80%)
+        updateProgress(80, currentLang === 'en' ? 'Executing cancellation...' : '執行取消中...');
         const executor = new MockExecutor();
         const result = await executor.execute(approved, {
           subscriptionDetails: topRec.subscription
@@ -467,7 +519,8 @@
 
         await sleep(500);
 
-        // Step 5: Audit Log
+        // Step 5: Audit Log (100%)
+        updateProgress(100, currentLang === 'en' ? 'Recording audit log...' : '記錄審計日誌中...');
         const auditLog = demoData.mandateManager.getAuditLog();
         const entries = auditLog.getAllEntries();
 
@@ -481,12 +534,18 @@
 
         document.getElementById('auditLog').innerHTML = auditHtml;
 
+        progressContainer.style.display = 'none';
+        btn.style.display = 'block';
         btn.textContent = currentLang === 'en' ? '✅ Demo Complete!' : '✅ 展示完成！';
         btn.style.background = '#48bb78';
+        btn.disabled = false;
 
       } catch (error) {
+        progressContainer.style.display = 'none';
+        btn.style.display = 'block';
         btn.textContent = currentLang === 'en' ? '❌ Demo Failed' : '❌ 展示失敗';
         btn.style.background = '#f56565';
+        btn.disabled = false;
         console.error(error);
       }
     };
