@@ -1,0 +1,103 @@
+{
+  "version": "1.0",
+  "recorded": "2026-11-25T19:00:00.000Z",
+  "steps": [
+    {
+      "action": "navigate",
+      "url": "http://localhost:4199/fictional-merchant.html",
+      "timestamp": 1732560000000
+    },
+    {
+      "action": "fill",
+      "selector": "[data-testid='email-input']",
+      "value": "demo@example.com",
+      "reason": "Enter email for login",
+      "timestamp": 1732560001000
+    },
+    {
+      "action": "fill",
+      "selector": "[data-testid='password-input']",
+      "value": "demo123",
+      "reason": "Enter password",
+      "timestamp": 1732560002000
+    },
+    {
+      "action": "click",
+      "selector": "button:has-text('Sign In')",
+      "reason": "Submit login form",
+      "timestamp": 1732560003000
+    },
+    {
+      "action": "wait",
+      "duration": 1000,
+      "reason": "Wait for 2FA screen",
+      "timestamp": 1732560004000
+    },
+    {
+      "action": "fill",
+      "selector": "[data-testid='twofa-code']",
+      "value": "123456",
+      "reason": "User-present 2FA code (simulated)",
+      "timestamp": 1732560005000
+    },
+    {
+      "action": "click",
+      "selector": "button:has-text('Verify')",
+      "reason": "Submit 2FA",
+      "timestamp": 1732560006000
+    },
+    {
+      "action": "wait",
+      "duration": 1000,
+      "reason": "Wait for account screen",
+      "timestamp": 1732560007000
+    },
+    {
+      "action": "click",
+      "selector": "a:has-text('Need to cancel')",
+      "reason": "Click hidden cancel link",
+      "timestamp": 1732560008000
+    },
+    {
+      "action": "wait",
+      "duration": 500,
+      "reason": "Wait for retention modal",
+      "timestamp": 1732560009000
+    },
+    {
+      "action": "click",
+      "selector": "button:has-text('No thanks, continue cancelling')",
+      "reason": "Reject retention offer",
+      "timestamp": 1732560010000
+    },
+    {
+      "action": "wait",
+      "duration": 500,
+      "reason": "Wait for confirmshaming modal",
+      "timestamp": 1732560011000
+    },
+    {
+      "action": "click",
+      "selector": "button:has-text('Yes, I want to lose all these benefits')",
+      "reason": "Proceed through confirmshaming",
+      "timestamp": 1732560012000
+    },
+    {
+      "action": "wait",
+      "duration": 500,
+      "reason": "Wait for success screen",
+      "timestamp": 1732560013000
+    },
+    {
+      "action": "verified",
+      "timestamp": 1732560014000
+    }
+  ],
+  "result": {
+    "success": true,
+    "message": "Subscription cancelled successfully",
+    "evidence": {
+      "confirmationId": "CNF-2026-11-25-XY789"
+    }
+  }
+}
