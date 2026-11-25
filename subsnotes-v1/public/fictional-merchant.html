@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Premium Streaming Service</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      overflow: hidden;
+    }
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 30px;
+      text-align: center;
+    }
+    .header h1 { font-size: 28px; margin-bottom: 10px; }
+    .header p { opacity: 0.9; }
+    .content { padding: 30px; }
+    .user-info {
+      background: #f7fafc;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    .user-info h2 { font-size: 18px; margin-bottom: 10px; color: #2d3748; }
+    .user-info p { color: #718096; margin: 5px 0; }
+    .subscription-details {
+      border: 2px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .subscription-details h3 { margin-bottom: 15px; color: #2d3748; }
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .detail-row:last-child { border-bottom: none; }
+    .detail-label { color: #718096; }
+    .detail-value { font-weight: 600; color: #2d3748; }
+    .buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      margin-top: 30px;
+    }
+    .btn {
+      padding: 15px 30px;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      text-align: center;
+    }
+    .btn-primary {
+      background: #48bb78;
+      color: white;
+    }
+    .btn-primary:hover { background: #38a169; }
+    .btn-secondary {
+      background: #edf2f7;
+      color: #4a5568;
+    }
+    .btn-secondary:hover { background: #e2e8f0; }
+    .btn-danger {
+      background: transparent;
+      color: #e53e3e;
+      border: 1px solid #feb2b2;
+    }
+    .btn-danger:hover { background: #fff5f5; }
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal.active { display: flex; }
+    .modal-content {
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      max-width: 500px;
+      margin: 20px;
+    }
+    .modal-content h2 { margin-bottom: 20px; color: #2d3748; }
+    .modal-content p { margin: 15px 0; color: #718096; line-height: 1.6; }
+    .offer-box {
+      background: #fef5e7;
+      border: 2px solid #f9ca24;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+      text-align: center;
+    }
+    .offer-box h3 { color: #d68910; margin-bottom: 10px; }
+    .offer-box p { font-size: 24px; font-weight: bold; color: #d68910; }
+    .hidden { display: none !important; }
+    .cancel-link {
+      text-align: center;
+      margin-top: 20px;
+      padding: 10px;
+    }
+    .cancel-link a {
+      color: #a0aec0;
+      font-size: 12px;
+      text-decoration: none;
+      opacity: 0.5;
+    }
+    .cancel-link a:hover { opacity: 0.8; text-decoration: underline; }
+    .shame-text {
+      color: #e53e3e;
+      font-weight: 600;
+      margin-top: 10px;
+    }
+    .twofa-box {
+      background: #f7fafc;
+      border: 2px solid #cbd5e0;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+    }
+    .twofa-box label {
+      display: block;
+      margin-bottom: 10px;
+      color: #2d3748;
+      font-weight: 600;
+    }
+    .twofa-box input {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #cbd5e0;
+      border-radius: 6px;
+      font-size: 18px;
+      text-align: center;
+      letter-spacing: 8px;
+    }
+    .success-message {
+      text-align: center;
+      padding: 40px;
+    }
+    .success-message .icon {
+      font-size: 64px;
+      margin-bottom: 20px;
+    }
+    .success-message h2 {
+      color: #2d3748;
+      margin-bottom: 15px;
+    }
+    .success-message p {
+      color: #718096;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎬 Premium Streaming</h1>
+      <p>Your Account Management</p>
+    </div>
+
+    <div id="loginScreen" class="content">
+      <h2 style="margin-bottom: 20px;">Sign in to manage your account</h2>
+      <div style="margin-bottom: 15px;">
+        <label style="display: block; margin-bottom: 5px; color: #4a5568;">Email</label>
+        <input type="email" id="emailInput" placeholder="your@email.com" 
+               style="width: 100%; padding: 12px; border: 2px solid #cbd5e0; border-radius: 6px; font-size: 16px;">
+      </div>
+      <div style="margin-bottom: 20px;">
+        <label style="display: block; margin-bottom: 5px; color: #4a5568;">Password</label>
+        <input type="password" id="passwordInput" placeholder="••••••••" 
+               style="width: 100%; padding: 12px; border: 2px solid #cbd5e0; border-radius: 6px; font-size: 16px;">
+      </div>
+      <button onclick="handleLogin()" class="btn btn-primary" style="width: 100%;">Sign In</button>
+      <p style="text-align: center; margin-top: 15px; color: #a0aec0; font-size: 14px;">
+        This is a fictional demo site for testing
+      </p>
+    </div>
+
+    <div id="twoFAScreen" class="content hidden">
+      <h2 style="margin-bottom: 20px;">Two-Factor Authentication</h2>
+      <p style="color: #718096; margin-bottom: 20px;">
+        Enter the 6-digit code from your authenticator app
+      </p>
+      <div class="twofa-box">
+        <label>Verification Code</label>
+        <input type="text" id="twoFACode" maxlength="6" pattern="[0-9]*" inputmode="numeric" 
+               placeholder="000000">
+      </div>
+      <button onclick="handleTwoFA()" class="btn btn-primary" style="width: 100%;">Verify</button>
+      <p style="text-align: center; margin-top: 15px; color: #a0aec0; font-size: 14px;">
+        For this demo, any 6-digit code works
+      </p>
+    </div>
+
+    <div id="accountScreen" class="content hidden">
+      <div class="user-info">
+        <h2>Welcome back!</h2>
+        <p><strong>Email:</strong> demo@example.com</p>
+        <p><strong>Member since:</strong> January 2025</p>
+      </div>
+
+      <div class="subscription-details">
+        <h3>Your Premium Subscription</h3>
+        <div class="detail-row">
+          <span class="detail-label">Plan</span>
+          <span class="detail-value">Premium Monthly</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Price</span>
+          <span class="detail-value">$29.99/month</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Next billing</span>
+          <span class="detail-value">December 1, 2026</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Status</span>
+          <span class="detail-value" style="color: #48bb78;">Active</span>
+        </div>
+      </div>
+
+      <div class="buttons">
+        <button onclick="showUpdatePayment()" class="btn btn-primary">Update Payment Method</button>
+        <button onclick="showManagePreferences()" class="btn btn-secondary">Manage Preferences</button>
+        <button onclick="showHelp()" class="btn btn-secondary">Help & Support</button>
+      </div>
+
+      <div class="cancel-link">
+        <a href="#" onclick="startCancellation(); return false;">Need to cancel your subscription?</a>
+      </div>
+    </div>
+
+    <div id="successScreen" class="content hidden">
+      <div class="success-message">
+        <div class="icon">✅</div>
+        <h2>Subscription Cancelled</h2>
+        <p>Your subscription has been successfully cancelled.</p>
+        <p style="margin-top: 15px;">You'll continue to have access until December 1, 2026.</p>
+        <p style="margin-top: 15px; font-size: 14px; color: #a0aec0;">
+          Confirmation ID: <strong>CNF-2026-11-25-XY789</strong>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Retention Offer Modal -->
+  <div id="retentionModal" class="modal">
+    <div class="modal-content">
+      <h2>Wait! Special offer just for you</h2>
+      <p>We'd hate to see you go. How about we give you <strong>50% off</strong> for the next 3 months?</p>
+      
+      <div class="offer-box">
+        <h3>Limited Time Offer</h3>
+        <p>$14.99/month</p>
+        <p style="font-size: 14px; color: #718096; font-weight: normal;">Regular price $29.99</p>
+      </div>
+
+      <p>That's just $44.97 total for 3 months of Premium!</p>
+
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 20px;">
+        <button onclick="acceptOffer()" class="btn btn-primary">Accept This Offer</button>
+        <button onclick="rejectOffer()" class="btn btn-secondary">No thanks, continue cancelling</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirmshaming Modal -->
+  <div id="confirmshamingModal" class="modal">
+    <div class="modal-content">
+      <h2>Are you sure?</h2>
+      <p>You'll lose access to:</p>
+      <ul style="margin: 20px 0; padding-left: 20px; color: #718096;">
+        <li style="margin: 10px 0;">10,000+ exclusive movies and shows</li>
+        <li style="margin: 10px 0;">4K Ultra HD streaming</li>
+        <li style="margin: 10px 0;">Download for offline viewing</li>
+        <li style="margin: 10px 0;">Ad-free experience</li>
+      </ul>
+      <p class="shame-text">This seems like a mistake. Are you absolutely certain?</p>
+
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 20px;">
+        <button onclick="keepSubscription()" class="btn btn-primary">Keep My Subscription</button>
+        <button onclick="finalConfirm()" class="btn btn-danger">Yes, I want to lose all these benefits</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function handleLogin() {
+      const email = document.getElementById('emailInput').value;
+      const password = document.getElementById('passwordInput').value;
+      
+      if (!email || !password) {
+        alert('Please enter email and password');
+        return;
+      }
+
+      document.getElementById('loginScreen').classList.add('hidden');
+      document.getElementById('twoFAScreen').classList.remove('hidden');
+    }
+
+    function handleTwoFA() {
+      const code = document.getElementById('twoFACode').value;
+      
+      if (code.length !== 6) {
+        alert('Please enter a 6-digit code');
+        return;
+      }
+
+      document.getElementById('twoFAScreen').classList.add('hidden');
+      document.getElementById('accountScreen').classList.remove('hidden');
+    }
+
+    function showUpdatePayment() {
+      alert('Payment update requires user to be present. This would open a payment form.');
+    }
+
+    function showManagePreferences() {
+      alert('Preferences screen (not part of cancellation flow)');
+    }
+
+    function showHelp() {
+      alert('Help & Support (not part of cancellation flow)');
+    }
+
+    function startCancellation() {
+      // Dark pattern: Show retention offer first
+      document.getElementById('retentionModal').classList.add('active');
+    }
+
+    function acceptOffer() {
+      document.getElementById('retentionModal').classList.remove('active');
+      alert('Great! Your discounted subscription is now active.');
+      location.reload();
+    }
+
+    function rejectOffer() {
+      document.getElementById('retentionModal').classList.remove('active');
+      // Dark pattern: Show confirmshaming
+      document.getElementById('confirmshamingModal').classList.add('active');
+    }
+
+    function keepSubscription() {
+      document.getElementById('confirmshamingModal').classList.remove('active');
+      alert('Wonderful! Your subscription remains active.');
+      location.reload();
+    }
+
+    function finalConfirm() {
+      document.getElementById('confirmshamingModal').classList.remove('active');
+      // Simulate cancellation process
+      setTimeout(() => {
+        document.getElementById('accountScreen').classList.add('hidden');
+        document.getElementById('successScreen').classList.remove('hidden');
+      }, 500);
+    }
+
+    // Set data attributes for Playwright testing
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('loginScreen').setAttribute('data-testid', 'login-screen');
+      document.getElementById('emailInput').setAttribute('data-testid', 'email-input');
+      document.getElementById('passwordInput').setAttribute('data-testid', 'password-input');
+      document.getElementById('twoFAScreen').setAttribute('data-testid', 'twofa-screen');
+      document.getElementById('twoFACode').setAttribute('data-testid', 'twofa-code');
+      document.getElementById('accountScreen').setAttribute('data-testid', 'account-screen');
+      document.getElementById('retentionModal').setAttribute('data-testid', 'retention-modal');
+      document.getElementById('confirmshamingModal').setAttribute('data-testid', 'confirmshaming-modal');
+      document.getElementById('successScreen').setAttribute('data-testid', 'success-screen');
+    });
+  </script>
+</body>
+</html>

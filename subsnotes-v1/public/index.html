@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SubsNotes v1 - AI Subscription Manager</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    :root {
+      --primary: #667eea;
+      --primary-dark: #5568d3;
+      --secondary: #48bb78;
+      --danger: #f56565;
+      --warning: #ed8936;
+      --bg: #f7fafc;
+      --card: #ffffff;
+      --text: #2d3748;
+      --text-muted: #718096;
+      --border: #e2e8f0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    .nav {
+      background: white;
+      border-bottom: 1px solid var(--border);
+      padding: 20px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .nav-content {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logo {
+      font-size: 24px;
+      font-weight: bold;
+      color: var(--primary);
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 20px;
+      align-items: center;
+    }
+
+    .nav-link {
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .nav-link:hover { color: var(--primary); }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 30px 20px;
+    }
+
+    .hero {
+      text-align: center;
+      padding: 60px 20px;
+      background: linear-gradient(135deg, var(--primary) 0%, #764ba2 100%);
+      color: white;
+      border-radius: 16px;
+      margin-bottom: 40px;
+    }
+
+    .hero h1 {
+      font-size: 48px;
+      margin-bottom: 20px;
+    }
+
+    .hero p {
+      font-size: 20px;
+      opacity: 0.9;
+      max-width: 600px;
+      margin: 0 auto 30px;
+    }
+
+    .hero-buttons {
+      display: flex;
+      gap: 15px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      padding: 12px 30px;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      text-decoration: none;
+      display: inline-block;
+    }
+
+    .btn-primary {
+      background: var(--secondary);
+      color: white;
+    }
+
+    .btn-primary:hover { background: #38a169; }
+
+    .btn-secondary {
+      background: white;
+      color: var(--primary);
+    }
+
+    .btn-secondary:hover { background: var(--bg); }
+
+    .pricing-note {
+      background: rgba(255,255,255,0.2);
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 20px;
+      font-size: 14px;
+    }
+
+    .section {
+      margin-bottom: 40px;
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .section-header h2 {
+      font-size: 24px;
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: 12px;
+      padding: 25px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+
+    .budget-card {
+      background: linear-gradient(135deg, var(--primary) 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .budget-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin-top: 20px;
+    }
+
+    .stat {
+      text-align: center;
+      padding: 15px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 8px;
+    }
+
+    .stat-label {
+      font-size: 14px;
+      opacity: 0.9;
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-size: 32px;
+      font-weight: bold;
+    }
+
+    .progress-bar {
+      background: rgba(255,255,255,0.2);
+      border-radius: 20px;
+      height: 12px;
+      margin-top: 20px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      background: var(--secondary);
+      height: 100%;
+      border-radius: 20px;
+      transition: width 0.3s;
+    }
+
+    .subscription-list {
+      display: grid;
+      gap: 15px;
+    }
+
+    .subscription-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px;
+      background: var(--card);
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      transition: all 0.2s;
+    }
+
+    .subscription-item:hover {
+      border-color: var(--primary);
+      box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
+    }
+
+    .subscription-info {
+      flex: 1;
+    }
+
+    .subscription-name {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 5px;
+    }
+
+    .subscription-meta {
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    .subscription-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .badge {
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .badge-warning {
+      background: #fef5e7;
+      color: var(--warning);
+    }
+
+    .badge-danger {
+      background: #fee;
+      color: var(--danger);
+    }
+
+    .badge-success {
+      background: #f0fff4;
+      color: var(--secondary);
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal.active { display: flex; }
+
+    .modal-content {
+      background: white;
+      padding: 30px;
+      border-radius: 16px;
+      max-width: 600px;
+      max-height: 80vh;
+      overflow-y: auto;
+      margin: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .modal-header h3 {
+      font-size: 24px;
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: var(--text-muted);
+    }
+
+    .recommendation-card {
+      background: var(--bg);
+      border-left: 4px solid var(--primary);
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+    }
+
+    .recommendation-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      margin-bottom: 10px;
+    }
+
+    .recommendation-type {
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 14px;
+    }
+
+    .confidence {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .reasons {
+      margin: 15px 0;
+      padding-left: 20px;
+    }
+
+    .reasons li {
+      margin: 8px 0;
+      color: var(--text-muted);
+    }
+
+    .lang-switcher {
+      cursor: pointer;
+      padding: 8px 15px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: white;
+    }
+
+    .footer {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-muted);
+      font-size: 14px;
+      border-top: 1px solid var(--border);
+      margin-top: 60px;
+    }
+
+    @media (max-width: 768px) {
+      .hero h1 { font-size: 36px; }
+      .hero p { font-size: 18px; }
+      .budget-stats { grid-template-columns: 1fr; }
+      .subscription-item { flex-direction: column; align-items: start; gap: 15px; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-content">
+      <div class="logo">💳 SubsNotes</div>
+      <div class="nav-links">
+        <a href="#" class="nav-link" onclick="showDashboard(); return false;">Dashboard</a>
+        <a href="#" class="nav-link" onclick="showJudgeMode(); return false;">Judge Mode</a>
+        <a href="fictional-merchant.html" class="nav-link" target="_blank">Demo Site</a>
+        <select class="lang-switcher" id="langSwitch" onchange="switchLanguage()">
+          <option value="en">English</option>
+          <option value="zh-TW">繁體中文</option>
+        </select>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="hero">
+      <h1 data-i18n="hero.title">AI-Powered Subscription Manager</h1>
+      <p data-i18n="hero.description">
+        Reduce decision fatigue and stay within budget. Your AI agent monitors subscriptions, 
+        recommends actions, and executes with your explicit approval.
+      </p>
+      <div class="hero-buttons">
+        <button class="btn btn-primary" onclick="showJudgeMode()" data-i18n="hero.tryDemo">Try Judge Mode Demo</button>
+        <button class="btn btn-secondary" onclick="showLearnMore()" data-i18n="hero.learnMore">Learn More</button>
+      </div>
+      <div class="pricing-note">
+        <strong data-i18n="hero.pricing">Pricing:</strong> <span data-i18n="hero.pricingDetails">US$30/month when available. All interactions in this MVP are virtual/fictional.</span>
+      </div>
+    </div>
+
+    <!-- Budget Section -->
+    <div class="section" id="budgetSection">
+      <div class="section-header">
+        <h2 data-i18n="budget.title">Your Monthly Budget</h2>
+        <button class="btn btn-primary" onclick="showBudgetSettings()" data-i18n="budget.adjust">Adjust Budget</button>
+      </div>
+      
+      <div class="card budget-card">
+        <h3 data-i18n="budget.envelope">Budget Envelope</h3>
+        <div class="budget-stats">
+          <div class="stat">
+            <div class="stat-label" data-i18n="budget.limit">Monthly Limit</div>
+            <div class="stat-value" id="budgetLimit">$0.00</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label" data-i18n="budget.allocated">Allocated</div>
+            <div class="stat-value" id="budgetAllocated">$0.00</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label" data-i18n="budget.remaining">Remaining</div>
+            <div class="stat-value" id="budgetRemaining">$0.00</div>
+          </div>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="budgetProgress" style="width: 0%"></div>
+        </div>
+        <p style="margin-top: 15px; font-size: 14px; opacity: 0.9;" data-i18n="budget.note">
+          Note: No money is held. Licensed-partner wallets coming in future versions.
+        </p>
+      </div>
+    </div>
+
+    <!-- Recommendations Section -->
+    <div class="section" id="recommendationsSection">
+      <div class="section-header">
+        <h2 data-i18n="recommendations.title">AI Recommendations</h2>
+        <button class="btn btn-secondary" onclick="refreshRecommendations()" data-i18n="recommendations.refresh">Refresh</button>
+      </div>
+      <div id="recommendationsList"></div>
+    </div>
+
+    <!-- Subscriptions Section -->
+    <div class="section" id="subscriptionsSection">
+      <div class="section-header">
+        <h2 data-i18n="subscriptions.title">Your Subscriptions</h2>
+        <button class="btn btn-primary" onclick="addSubscription()" data-i18n="subscriptions.add">+ Add</button>
+      </div>
+      <div class="subscription-list" id="subscriptionsList"></div>
+    </div>
+  </div>
+
+  <!-- Mandate Modal -->
+  <div id="mandateModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 data-i18n="mandate.title">Approve Action</h3>
+        <button class="close-btn" onclick="closeMandateModal()">&times;</button>
+      </div>
+      <div id="mandateContent"></div>
+    </div>
+  </div>
+
+  <!-- Learn More Modal -->
+  <div id="learnMoreModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 data-i18n="learnMore.title">How SubsNotes Works</h3>
+        <button class="close-btn" onclick="closeLearnMoreModal()">&times;</button>
+      </div>
+      <div>
+        <h4 data-i18n="learnMore.loop">The Closed Loop</h4>
+        <ol style="margin: 15px 0; padding-left: 25px;">
+          <li data-i18n="learnMore.step1"><strong>Detect:</strong> AI reads receipts (locally) and builds your subscription list</li>
+          <li data-i18n="learnMore.step2"><strong>Judge:</strong> AI evaluates against your budget and usage patterns</li>
+          <li data-i18n="learnMore.step3"><strong>Recommend:</strong> AI suggests keep/downgrade/cancel with clear reasons</li>
+          <li data-i18n="learnMore.step4"><strong>Approve:</strong> You approve actions via explicit mandates</li>
+          <li data-i18n="learnMore.step5"><strong>Execute:</strong> AI agent performs the action within mandate limits</li>
+          <li data-i18n="learnMore.step6"><strong>Verify:</strong> AI confirms completion and records evidence</li>
+        </ol>
+
+        <h4 style="margin-top: 25px;" data-i18n="learnMore.security">Security & Privacy</h4>
+        <ul style="margin: 15px 0; padding-left: 25px; list-style: disc;">
+          <li data-i18n="learnMore.securityNote1">Your local AI agent reads receipts locally and sends only signed summaries</li>
+          <li data-i18n="learnMore.securityNote2">Ed25519 signatures prevent tampering and prompt injection</li>
+          <li data-i18n="learnMore.securityNote3">No passwords stored; login and 2FA are user-present</li>
+          <li data-i18n="learnMore.securityNote4">Append-only audit log tracks all actions</li>
+        </ul>
+
+        <h4 style="margin-top: 25px;" data-i18n="learnMore.execution">Execution Tiers</h4>
+        <ul style="margin: 15px 0; padding-left: 25px; list-style: disc;">
+          <li data-i18n="learnMore.tier0"><strong>T0:</strong> Deep links (Apple, Google Play, LINE Pay, etc.)</li>
+          <li data-i18n="learnMore.tier1"><strong>T1:</strong> Supervised step-by-step guidance</li>
+          <li data-i18n="learnMore.tier2"><strong>T2:</strong> Autonomous execution (demo only in this MVP)</li>
+        </ul>
+
+        <h4 style="margin-top: 25px;" data-i18n="learnMore.limitations">Known Limitations</h4>
+        <ul style="margin: 15px 0; padding-left: 25px; list-style: disc;">
+          <li data-i18n="learnMore.limit1">Apple/Google Play subscriptions are deep-link only</li>
+          <li data-i18n="learnMore.limit2">Some merchants have dark patterns (retention offers, hidden buttons)</li>
+          <li data-i18n="learnMore.limit3">All data in this MVP is fictional/virtual</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>SubsNotes v1 MVP - Built for OPEN LAB 2026 AI Build Challenge</p>
+    <p style="margin-top: 10px;">All subscriptions, amounts, and merchants in this demo are fictional.</p>
+  </div>
+
+  <script type="module">
+    import { createBudget, allocateBudget, calculateMetrics, getBudgetSummary } from './budget.mjs';
+    import { generateRecommendation, batchAnalyze } from './recommendations.mjs';
+    import { MandateManager } from './mandates.mjs';
+
+    // Will be loaded dynamically
+    window.SubsNotes = {
+      budget: null,
+      subscriptions: [],
+      mandateManager: new MandateManager(),
+      currentLang: 'en',
+      i18n: {}
+    };
+
+    async function init() {
+      await loadI18n();
+      loadDemoData();
+      renderBudget();
+      renderSubscriptions();
+      renderRecommendations();
+    }
+
+    async function loadI18n() {
+      // Simplified i18n - would load from separate files in production
+      window.SubsNotes.i18n = {
+        en: { /* English translations */ },
+        'zh-TW': { /* Traditional Chinese translations */ }
+      };
+    }
+
+    function loadDemoData() {
+      // Create demo budget
+      window.SubsNotes.budget = createBudget(100);
+      
+      // Add demo subscriptions
+      const demoSubs = [
+        { merchant: 'Netflix', amount: 15.99, cadence: 'monthly', status: 'active' },
+        { merchant: 'Spotify', amount: 9.99, cadence: 'monthly', status: 'active' },
+        { merchant: 'GitHub Pro', amount: 84.00, cadence: 'annual', status: 'active', essentialService: true }
+      ];
+
+      demoSubs.forEach(sub => {
+        window.SubsNotes.budget = allocateBudget(window.SubsNotes.budget, sub);
+      });
+    }
+
+    function renderBudget() {
+      const summary = getBudgetSummary(window.SubsNotes.budget);
+      document.getElementById('budgetLimit').textContent = summary.limit;
+      document.getElementById('budgetAllocated').textContent = summary.allocated;
+      document.getElementById('budgetRemaining').textContent = summary.remaining;
+      
+      const utilization = parseFloat(summary.utilizationPercent);
+      document.getElementById('budgetProgress').style.width = Math.min(utilization, 100) + '%';
+      
+      if (utilization > 100) {
+        document.getElementById('budgetProgress').style.background = 'var(--danger)';
+      } else if (utilization > 90) {
+        document.getElementById('budgetProgress').style.background = 'var(--warning)';
+      }
+    }
+
+    function renderSubscriptions() {
+      const list = document.getElementById('subscriptionsList');
+      const subs = window.SubsNotes.budget.allocations.filter(a => a.status === 'active');
+      
+      list.innerHTML = subs.map(sub => `
+        <div class="subscription-item">
+          <div class="subscription-info">
+            <div class="subscription-name">${sub.merchant}</div>
+            <div class="subscription-meta">
+              $${sub.amount}/${sub.cadence} · $${sub.monthlyAmount}/mo equivalent
+            </div>
+          </div>
+          <div class="subscription-actions">
+            ${sub.essentialService ? '<span class="badge badge-success">Essential</span>' : ''}
+            <button class="btn btn-secondary" onclick="viewSubscription('${sub.id}')">Details</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderRecommendations() {
+      const list = document.getElementById('recommendationsList');
+      list.innerHTML = '<div class="card"><p>Loading recommendations...</p></div>';
+      // Would fetch and render actual recommendations
+    }
+
+    window.showJudgeMode = () => {
+      window.location.href = 'judge.html';
+    };
+
+    window.showLearnMore = () => {
+      document.getElementById('learnMoreModal').classList.add('active');
+    };
+
+    window.closeLearnMoreModal = () => {
+      document.getElementById('learnMoreModal').classList.remove('active');
+    };
+
+    window.showBudgetSettings = () => {
+      alert('Budget adjustment coming soon');
+    };
+
+    window.addSubscription = () => {
+      alert('Add subscription form coming soon');
+    };
+
+    window.refreshRecommendations = () => {
+      renderRecommendations();
+    };
+
+    window.viewSubscription = (id) => {
+      alert(`View subscription ${id}`);
+    };
+
+    window.switchLanguage = () => {
+      const lang = document.getElementById('langSwitch').value;
+      window.SubsNotes.currentLang = lang;
+      // Would update all i18n text
+    };
+
+    // Initialize on load
+    init();
+  </script>
+</body>
+</html>
