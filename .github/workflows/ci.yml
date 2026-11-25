@@ -26,6 +26,9 @@ jobs:
       - run: npm run package:skill
       - run: npm ci --prefix subsnotes-v1
       - run: npm test --prefix subsnotes-v1
+      - run: npx playwright install chromium --with-deps
+        working-directory: subsnotes-v1
+      - run: npm run test:e2e --prefix subsnotes-v1
   macos:
     runs-on: macos-14
     steps:
