@@ -30,7 +30,9 @@ jobs:
         working-directory: subsnotes-v1
       - run: npm run test:e2e --prefix subsnotes-v1
   macos:
-    runs-on: macos-14
+    # macos-14 currently fails to schedule on this repo with:
+    # "The configuration 'macos-14-arm64-us-default' is not supported"
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - run: swift test
