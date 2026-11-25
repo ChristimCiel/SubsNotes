@@ -6,7 +6,7 @@
 import { createBudget, allocateBudget, updateAllocationStatus } from './budget.mjs';
 import { generateRecommendation } from './recommendations.mjs';
 import { MandateManager } from './mandates.mjs';
-import { MockExecutor } from './executor.mjs';
+import { MockExecutor } from './mock-executor.mjs';
 
 /**
  * Create judge mode demo data

@@ -99,44 +99,30 @@ test.describe('Fictional Merchant Cancellation', () => {
   test('judge mode page loads and runs demo', async ({ page }) => {
     await page.goto('http://localhost:4199/judge.html');
 
-    // Wait for content to load
-    await page.waitForTimeout(1500);
-
-    // Check if content is visible
+    // Module init removes the loading spinner after ~1s
     const content = page.locator('#content');
-    await expect(content).toBeVisible();
+    await expect(content).toBeVisible({ timeout: 10000 });
 
-    // Click run demo button
     const runBtn = page.locator('#runBtn');
     await expect(runBtn).toBeVisible();
     await runBtn.click();
 
-    // Wait for demo to complete (should be quick in mock mode)
-    await page.waitForTimeout(3000);
+    // Demo finishes when progress hits 100% or the success button appears
+    await expect(runBtn).toContainText(/Demo Complete|展示完成/, { timeout: 15000 });
 
-    // Verify budget was populated
     const budgetLimit = page.locator('#budgetLimit');
-    const limitText = await budgetLimit.textContent();
-    expect(limitText).not.toBe('0.00');
+    await expect(budgetLimit).not.toHaveText('0.00');
 
-    // Verify recommendations were generated
     const recommendations = page.locator('.recommendation-card');
-    const recCount = await recommendations.count();
-    expect(recCount).toBeGreaterThan(0);
+    await expect(recommendations.first()).toBeVisible();
 
-    // Verify mandate was created
     const mandateBox = page.locator('#mandate');
-    const mandateText = await mandateBox.textContent();
-    expect(mandateText).toContain('mandate_');
+    await expect(mandateBox).toContainText('mandate_');
 
-    // Verify execution succeeded
     const execution = page.locator('#execution');
-    const execText = await execution.textContent();
-    expect(execText).toContain('Successful' || '成功');
+    await expect(execution).toContainText(/Successful|成功/);
 
-    // Verify audit log
     const auditEntries = page.locator('.audit-entry');
-    const auditCount = await auditEntries.count();
-    expect(auditCount).toBeGreaterThan(0);
+    await expect(auditEntries.first()).toBeVisible();
   });
 });

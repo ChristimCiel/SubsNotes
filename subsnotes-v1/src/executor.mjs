@@ -3,12 +3,24 @@
  * Guided by Claude API with offline replay capability
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import { readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { MockExecutor } from './mock-executor.mjs';
+
+export { MockExecutor };
 
 const MAX_STEPS = 20;
 const TOKEN_LIMIT = 10000;
+const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
+const DEFAULT_REPLAY_DIR = join(MODULE_DIR, '..', 'fixtures', 'replays');
+
+// Map demo merchant labels onto the recorded offline fixture.
+const REPLAY_ALIASES = {
+  'premium-streaming': 'fictional-merchant',
+  'fictionalmerchant': 'fictional-merchant',
+  'fictional-merchant': 'fictional-merchant'
+};
 
 /**
  * Executor for T2 (autonomous) cancellations
@@ -17,9 +29,24 @@ export class PlaywrightExecutor {
   constructor(options = {}) {
     this.apiKey = options.apiKey || process.env.ANTHROPIC_API_KEY;
     this.replayMode = options.replayMode || !this.apiKey;
-    this.replayDir = options.replayDir || join(process.cwd(), 'fixtures', 'replays');
+    this.replayDir = options.replayDir || DEFAULT_REPLAY_DIR;
     this.tokenUsage = 0;
-    this.client = this.apiKey ? new Anthropic({ apiKey: this.apiKey }) : null;
+    this.client = null;
+    this._anthropicReady = null;
+  }
+
+  async ensureClient() {
+    if (this.client) return this.client;
+    if (!this.apiKey) {
+      throw new Error('Claude API key not available');
+    }
+    if (!this._anthropicReady) {
+      this._anthropicReady = import('@anthropic-ai/sdk').then(({ default: Anthropic }) => {
+        this.client = new Anthropic({ apiKey: this.apiKey });
+        return this.client;
+      });
+    }
+    return this._anthropicReady;
   }
 
   /**
@@ -83,9 +110,7 @@ export class PlaywrightExecutor {
    * Execute live with Claude API guidance
    */
   async executeLive(mandate, subscription, page, steps) {
-    if (!this.client) {
-      throw new Error('Claude API key not available');
-    }
+    await this.ensureClient();
 
     // Navigate to the merchant site
     await page.goto('http://localhost:4199/fictional-merchant.html');
@@ -328,33 +353,10 @@ If you encounter an unexpected page or error, respond with action: "stop" and ex
    * Get replay filename
    */
   getReplayFilename(mandate, subscription) {
-    const name = subscription.merchant.toLowerCase().replace(/\s+/g, '-');
+    const raw = (subscription?.merchant || mandate?.merchant || 'fictional-merchant')
+      .toLowerCase()
+      .replace(/\s+/g, '-');
+    const name = REPLAY_ALIASES[raw] || raw;
     return join(this.replayDir, `${name}-cancel.json`);
-  }
-}
-
-/**
- * Simplified executor for testing without Playwright
- */
-export class MockExecutor {
-  async execute(mandate, context) {
-    // Simulate execution
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    return {
-      success: true,
-      message: 'Mock cancellation successful',
-      evidence: {
-        confirmationId: 'MOCK-' + Date.now(),
-        steps: [
-          { action: 'navigate', url: 'mock-site' },
-          { action: 'click', selector: '.cancel-link' },
-          { action: 'click', selector: '.confirm-cancel' }
-        ],
-        duration: 100,
-        tokenUsage: 0,
-        replayMode: true
-      }
-    };
   }
 }
