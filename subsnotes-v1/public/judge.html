@@ -1,578 +1,234 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-product="subsnotes">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SubsNotes v1 - Judge Mode Demo</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
-      padding: 40px 20px;
-      color: #2d3748;
-    }
-
-    .container {
-      max-width: 900px;
-      margin: 0 auto;
-    }
-
-    .header {
-      text-align: center;
-      color: white;
-      margin-bottom: 40px;
-    }
-
-    .header h1 {
-      font-size: 48px;
-      margin-bottom: 15px;
-    }
-
-    .header p {
-      font-size: 20px;
-      opacity: 0.9;
-    }
-
-    .card {
-      background: white;
-      border-radius: 16px;
-      padding: 30px;
-      margin-bottom: 20px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-    }
-
-    .step {
-      border-left: 4px solid #667eea;
-      padding-left: 20px;
-      margin: 30px 0;
-    }
-
-    .step-number {
-      display: inline-block;
-      width: 40px;
-      height: 40px;
-      background: #667eea;
-      color: white;
-      border-radius: 50%;
-      text-align: center;
-      line-height: 40px;
-      font-weight: bold;
-      margin-right: 15px;
-    }
-
-    .step-title {
-      font-size: 24px;
-      font-weight: 600;
-      margin-bottom: 15px;
-      display: flex;
-      align-items: center;
-    }
-
-    .step-content {
-      margin-left: 55px;
-      color: #718096;
-      line-height: 1.8;
-    }
-
-    .recommendation-card {
-      background: #f7fafc;
-      border: 2px solid #e2e8f0;
-      border-radius: 12px;
-      padding: 20px;
-      margin: 15px 0;
-    }
-
-    .recommendation-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 10px;
-    }
-
-    .merchant-name {
-      font-size: 18px;
-      font-weight: 600;
-    }
-
-    .recommendation-type {
-      padding: 6px 12px;
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 600;
-      text-transform: uppercase;
-    }
-
-    .type-keep { background: #f0fff4; color: #48bb78; }
-    .type-cancel { background: #fee; color: #f56565; }
-    .type-downgrade { background: #fef5e7; color: #ed8936; }
-
-    .confidence {
-      font-size: 14px;
-      color: #718096;
-      margin: 5px 0;
-    }
-
-    .reasons {
-      list-style: none;
-      margin: 10px 0;
-    }
-
-    .reasons li {
-      padding: 5px 0;
-      padding-left: 25px;
-      position: relative;
-    }
-
-    .reasons li:before {
-      content: "•";
-      position: absolute;
-      left: 10px;
-      color: #667eea;
-      font-weight: bold;
-    }
-
-    .mandate-box {
-      background: #edf2f7;
-      border-radius: 8px;
-      padding: 20px;
-      margin: 15px 0;
-      font-family: 'Courier New', monospace;
-      font-size: 14px;
-    }
-
-    .execution-box {
-      background: #f0fff4;
-      border: 2px solid #48bb78;
-      border-radius: 12px;
-      padding: 20px;
-      margin: 15px 0;
-    }
-
-    .execution-steps {
-      list-style: decimal;
-      padding-left: 25px;
-      margin: 10px 0;
-    }
-
-    .audit-entry {
-      background: #f7fafc;
-      border-left: 3px solid #667eea;
-      padding: 15px;
-      margin: 10px 0;
-      border-radius: 4px;
-    }
-
-    .audit-entry strong {
-      display: block;
-      margin-bottom: 5px;
-    }
-
-    .btn {
-      padding: 15px 40px;
-      border: none;
-      border-radius: 8px;
-      font-size: 18px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s;
-      background: #48bb78;
-      color: white;
-      display: block;
-      margin: 30px auto;
-      text-align: center;
-    }
-
-    .btn:hover {
-      background: #38a169;
-      transform: translateY(-2px);
-      box-shadow: 0 10px 20px rgba(72, 187, 120, 0.3);
-    }
-
-    .btn:disabled {
-      background: #cbd5e0;
-      cursor: not-allowed;
-      transform: none;
-    }
-
-    .lang-switcher {
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      padding: 10px 20px;
-      background: white;
-      border: none;
-      border-radius: 8px;
-      font-weight: 600;
-      cursor: pointer;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    }
-
-    .hidden { display: none; }
-
-    .loading {
-      text-align: center;
-      padding: 60px;
-      color: white;
-      font-size: 20px;
-    }
-
-    .spinner {
-      border: 4px solid rgba(255,255,255,0.3);
-      border-top: 4px solid white;
-      border-radius: 50%;
-      width: 50px;
-      height: 50px;
-      animation: spin 1s linear infinite;
-      margin: 0 auto 20px;
-    }
-
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-
-    .progress-container {
-      background: white;
-      border-radius: 12px;
-      padding: 20px;
-      margin: 20px 0;
-    }
-
-    .progress-bar {
-      width: 100%;
-      height: 8px;
-      background: #e2e8f0;
-      border-radius: 4px;
-      overflow: hidden;
-      margin: 15px 0;
-    }
-
-    .progress-fill {
-      height: 100%;
-      background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-      transition: width 0.5s ease;
-      border-radius: 4px;
-    }
-
-    .progress-text {
-      text-align: center;
-      color: #667eea;
-      font-weight: 600;
-      margin-top: 10px;
-    }
-  </style>
+  <title>SubsNotes — Judge Mode</title>
+  <link rel="stylesheet" href="./suite.css">
 </head>
-<body>
-  <button class="lang-switcher" onclick="toggleLanguage()">
-    <span id="langText">中文</span>
-  </button>
+<body class="sx-shell">
+  <div id="shell-nav"></div>
 
-  <div class="container">
-    <div class="header">
-      <h1>🎭 <span data-i18n="title">Judge Mode Demo</span></h1>
-      <p data-i18n="subtitle">One-click demonstration of the complete SubsNotes v1 MVP flow</p>
-    </div>
+  <main class="sx-main">
+    <div id="content">
+      <p class="sx-eyebrow" data-i18n="nav.judge">Judge Mode</p>
+      <h1 class="sx-h1" style="font-size: var(--sx-text-2xl)">SubsNotes closed loop</h1>
+      <p class="sx-sub" data-i18n="judge.purpose">One-click offline demo of the closed loop. Pauses for your approval at step 3.</p>
+      <span class="sx-chip" data-i18n="chip.sample">Sample data · fictional</span>
 
-    <div id="loading" class="loading">
-      <div class="spinner"></div>
-      <p data-i18n="loading">Loading demo data...</p>
-    </div>
+      <ol class="sx-stepper" id="judgeStepper" style="margin-top: var(--sx-6)">
+        <li class="is-todo" data-i18n="step.detect">Detect</li>
+        <li class="is-todo" data-i18n="step.judge">Judge</li>
+        <li class="is-todo" data-i18n="step.approve">Approve</li>
+        <li class="is-todo" data-i18n="step.execute">Execute</li>
+        <li class="is-todo" data-i18n="step.verify">Verify</li>
+      </ol>
 
-    <div id="content" class="hidden">
-      <div class="card">
-        <div class="step">
-          <div class="step-title">
-            <span class="step-number">1</span>
-            <span data-i18n="step1.title">Initialize Budget</span>
-          </div>
-          <div class="step-content">
-            <p data-i18n="step1.desc">Set up a monthly budget envelope and load fictional subscriptions</p>
-            <div class="mandate-box">
-              <div><strong>Monthly Budget:</strong> $<span id="budgetLimit">100.00</span></div>
-              <div><strong>Allocated:</strong> $<span id="budgetAllocated">0.00</span></div>
-              <div><strong>Remaining:</strong> $<span id="budgetRemaining">0.00</span></div>
-              <div><strong>Active Subscriptions:</strong> <span id="subCount">0</span></div>
-            </div>
-          </div>
-        </div>
-
-        <div class="step">
-          <div class="step-title">
-            <span class="step-number">2</span>
-            <span data-i18n="step2.title">AI Recommendations</span>
-          </div>
-          <div class="step-content">
-            <p data-i18n="step2.desc">AI analyzes each subscription against budget and usage patterns</p>
-            <div id="recommendations"></div>
-          </div>
-        </div>
-
-        <div class="step">
-          <div class="step-title">
-            <span class="step-number">3</span>
-            <span data-i18n="step3.title">User Approves Action</span>
-          </div>
-          <div class="step-content">
-            <p data-i18n="step3.desc">Create and approve an explicit mandate for the top recommendation</p>
-            <div id="mandate" class="mandate-box"></div>
-          </div>
-        </div>
-
-        <div class="step">
-          <div class="step-title">
-            <span class="step-number">4</span>
-            <span data-i18n="step4.title">AI Agent Executes</span>
-          </div>
-          <div class="step-content">
-            <p data-i18n="step4.desc">Agent performs the action autonomously within mandate limits</p>
-            <div id="execution"></div>
-          </div>
-        </div>
-
-        <div class="step">
-          <div class="step-title">
-            <span class="step-number">5</span>
-            <span data-i18n="step5.title">Audit Log</span>
-          </div>
-          <div class="step-content">
-            <p data-i18n="step5.desc">Complete append-only record of all actions taken</p>
-            <div id="auditLog"></div>
-          </div>
-        </div>
-
-        <div class="progress-container" id="progressContainer" style="display: none;">
-          <h3 style="margin-bottom: 10px;">Running Demo...</h3>
-          <div class="progress-bar">
-            <div class="progress-fill" id="progressFill" style="width: 0%"></div>
-          </div>
-          <div class="progress-text" id="progressText">Initializing...</div>
-        </div>
-
-        <button class="btn" onclick="runDemo()" id="runBtn" data-i18n="runButton">
-          🚀 Run Complete Demo
-        </button>
-
-        <div style="text-align: center; margin-top: 30px; padding: 20px; background: #edf2f7; border-radius: 8px;">
-          <p style="font-weight: 600; margin-bottom: 10px;" data-i18n="offline.title">✅ Offline Mode</p>
-          <p style="color: #718096; font-size: 14px;" data-i18n="offline.desc">
-            This demo runs completely offline. No ANTHROPIC_API_KEY required.
-            All data is fictional and all executions use pre-recorded replays.
-          </p>
+      <div class="sx-card" style="margin-bottom: var(--sx-4)">
+        <div class="sx-row" style="gap: var(--sx-6)">
+          <div class="sx-stat"><span class="sx-stat__label">Monthly Budget</span><span class="sx-stat__value sx-num">$<span id="budgetLimit">0.00</span></span></div>
+          <div class="sx-stat"><span class="sx-stat__label">Allocated</span><span class="sx-stat__value sx-num">$<span id="budgetAllocated">0.00</span></span></div>
+          <div class="sx-stat"><span class="sx-stat__label">Remaining</span><span class="sx-stat__value sx-num">$<span id="budgetRemaining">0.00</span></span></div>
+          <div class="sx-stat"><span class="sx-stat__label">Subscriptions</span><span class="sx-stat__value sx-num" id="subCount">0</span></div>
         </div>
       </div>
+
+      <div id="recommendations"></div>
+      <div id="mandate" class="mandate-box" style="margin: var(--sx-4) 0"></div>
+      <div id="approvalSlot"></div>
+      <div id="execution" class="execution-box" style="margin: var(--sx-4) 0"></div>
+      <div id="auditLog"></div>
+
+      <div class="progress-container" id="progressContainer" style="display: none;">
+        <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width: 0%"></div></div>
+        <div class="progress-text" id="progressText">Initializing...</div>
+      </div>
+
+      <button class="sx-btn sx-btn--primary" onclick="runDemo()" id="runBtn" data-i18n="judge.run">Run the full loop</button>
     </div>
-  </div>
+  </main>
+
+  <div id="shell-footer"></div>
 
   <script type="module">
     import { createJudgeData, generateJudgeRecommendations } from '/src/judge-mode.mjs';
     import { getBudgetSummary } from '/src/budget.mjs';
     import { MockExecutor } from '/src/mock-executor.mjs';
+    import { navHtml, footerHtml, wireShell } from './shell.mjs';
+    import { applyI18n, t } from './i18n.mjs';
+
+    document.getElementById('shell-nav').innerHTML = navHtml({ active: 'overview', judgeActive: true });
+    document.getElementById('shell-footer').innerHTML = footerHtml();
+    const shell = wireShell({ page: 'judge' });
 
     let demoData = null;
-    let currentLang = 'en';
+    let pendingMandate = null;
+    let pendingRec = null;
 
-    const i18n = {
-      en: {
-        title: 'Judge Mode Demo',
-        subtitle: 'One-click demonstration of the complete SubsNotes v1 MVP flow',
-        loading: 'Loading demo data...',
-        runButton: '🚀 Run Complete Demo',
-        step1: { title: 'Initialize Budget', desc: 'Set up a monthly budget envelope and load fictional subscriptions' },
-        step2: { title: 'AI Recommendations', desc: 'AI analyzes each subscription against budget and usage patterns' },
-        step3: { title: 'User Approves Action', desc: 'Create and approve an explicit mandate for the top recommendation' },
-        step4: { title: 'AI Agent Executes', desc: 'Agent performs the action autonomously within mandate limits' },
-        step5: { title: 'Audit Log', desc: 'Complete append-only record of all actions taken' },
-        offline: { 
-          title: '✅ Offline Mode', 
-          desc: 'This demo runs completely offline. No ANTHROPIC_API_KEY required. All data is fictional and all executions use pre-recorded replays.'
-        }
-      },
-      'zh-TW': {
-        title: '評審模式展示',
-        subtitle: 'SubsNotes v1 MVP 完整流程的一鍵展示',
-        loading: '載入展示數據中...',
-        runButton: '🚀 執行完整展示',
-        step1: { title: '初始化預算', desc: '建立月度預算包絡並載入虛構訂閱' },
-        step2: { title: 'AI 推薦', desc: 'AI 根據預算和使用模式分析每個訂閱' },
-        step3: { title: '使用者批准動作', desc: '為首要推薦建立並批准明確授權' },
-        step4: { title: 'AI 代理執行', desc: '代理在授權範圍內自主執行操作' },
-        step5: { title: '審計日誌', desc: '所有已採取動作的完整只附加記錄' },
-        offline: { 
-          title: '✅ 離線模式', 
-          desc: '此展示完全離線運行。無需 ANTHROPIC_API_KEY。所有數據均為虛構，所有執行均使用預錄重放。'
-        }
-      }
-    };
+    function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
-    async function init() {
-      setTimeout(() => {
-        document.getElementById('loading').classList.add('hidden');
-        document.getElementById('content').classList.remove('hidden');
-      }, 1000);
+    function setJudgeStep(n) {
+      const nodes = [...document.querySelectorAll('#judgeStepper li')];
+      nodes.forEach((el, i) => {
+        el.classList.remove('is-done', 'is-active', 'is-todo');
+        if (i < n) el.classList.add('is-done');
+        else if (i === n) el.classList.add('is-active');
+        else el.classList.add('is-todo');
+      });
     }
 
-    window.runDemo = async function() {
+    window.runDemo = async function () {
+      const lang = shell.getLang();
       const btn = document.getElementById('runBtn');
       const progressContainer = document.getElementById('progressContainer');
       const progressFill = document.getElementById('progressFill');
       const progressText = document.getElementById('progressText');
-      
+
       btn.disabled = true;
       btn.style.display = 'none';
       progressContainer.style.display = 'block';
+      document.getElementById('approvalSlot').innerHTML = '';
+      document.getElementById('execution').innerHTML = '';
+      document.getElementById('auditLog').innerHTML = '';
+      document.getElementById('mandate').innerHTML = '';
 
-      function updateProgress(percent, text) {
+      const updateProgress = (percent, text) => {
         progressFill.style.width = percent + '%';
         progressText.textContent = text;
-      }
+      };
 
       try {
-        // Step 1: Initialize (20%)
-        updateProgress(20, currentLang === 'en' ? 'Initializing budget...' : '初始化預算中...');
+        updateProgress(20, lang === 'en' ? 'Initializing budget...' : '初始化預算中...');
+        setJudgeStep(0);
         demoData = createJudgeData();
         const summary = getBudgetSummary(demoData.budget);
-        
         document.getElementById('budgetLimit').textContent = summary.limit.replace('$', '');
         document.getElementById('budgetAllocated').textContent = summary.allocated.replace('$', '');
         document.getElementById('budgetRemaining').textContent = summary.remaining.replace('$', '');
         document.getElementById('subCount').textContent = summary.subscriptionCount;
+        await sleep(200);
 
-        await sleep(500);
-
-        // Step 2: Recommendations (40%)
-        updateProgress(40, currentLang === 'en' ? 'Generating recommendations...' : '生成推薦中...');
+        updateProgress(40, lang === 'en' ? 'Generating recommendations...' : '生成推薦中...');
+        setJudgeStep(1);
         const recommendations = generateJudgeRecommendations(demoData.subscriptions, demoData.budget);
-        
-        const recHtml = recommendations.slice(0, 3).map((rec, i) => `
-          <div class="recommendation-card">
-            <div class="recommendation-header">
-              <div class="merchant-name">${rec.subscription.merchant}</div>
-              <div class="recommendation-type type-${rec.recommendation.type}">
-                ${rec.recommendation.type}
-              </div>
+        const actionable = recommendations.filter((r) => r.recommendation.type !== 'keep');
+        const topRec = actionable[0] || recommendations[0];
+        document.getElementById('recommendations').innerHTML = actionable.slice(0, 3).map((rec) => `
+          <div class="recommendation-card${rec === topRec ? ' sx-card--focus' : ''}">
+            <div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline">
+              <strong>${rec.subscription.merchant}</strong>
+              <span class="sx-status sx-status--caution">${rec.recommendation.type}</span>
             </div>
-            <div class="confidence">
-              ${currentLang === 'en' ? 'Confidence' : '信心度'}: ${(rec.recommendation.confidence * 100).toFixed(0)}%
-            </div>
-            <ul class="reasons">
-              ${rec.recommendation.reasons.map(r => `<li>${r}</li>`).join('')}
-            </ul>
-          </div>
-        `).join('');
-        
-        document.getElementById('recommendations').innerHTML = recHtml;
+            <div class="sx-muted">${lang === 'en' ? 'Confidence' : '信心度'}: ${(rec.recommendation.confidence * 100).toFixed(0)}%</div>
+            <ul>${rec.recommendation.reasons.map((r) => `<li>${r}</li>`).join('')}</ul>
+          </div>`).join('');
+        await sleep(200);
 
-        await sleep(500);
-
-        // Step 3: Mandate (60%)
-        updateProgress(60, currentLang === 'en' ? 'Creating mandate...' : '建立授權中...');
-        const topRec = recommendations[0];
+        updateProgress(55, lang === 'en' ? 'Creating mandate...' : '建立授權中...');
+        setJudgeStep(2);
+        pendingRec = topRec;
         const futureDate = new Date();
         futureDate.setDate(futureDate.getDate() + 7);
-
-        const mandate = demoData.mandateManager.createMandate({
+        const action = topRec.recommendation.type === 'downgrade' ? 'downgrade' : 'cancel';
+        pendingMandate = demoData.mandateManager.createMandate({
           merchant: topRec.subscription.merchant,
-          action: 'cancel',
+          action,
           scope: 'single',
           maxAmount: topRec.subscription.amount,
           expiresAt: futureDate.toISOString()
         });
 
-        const approved = demoData.mandateManager.approveMandate(mandate.id, 'user_signature_demo');
-
         document.getElementById('mandate').innerHTML = `
-          <div><strong>${currentLang === 'en' ? 'Mandate ID' : '授權 ID'}:</strong> ${mandate.id}</div>
-          <div><strong>${currentLang === 'en' ? 'Merchant' : '商家'}:</strong> ${mandate.merchant}</div>
-          <div><strong>${currentLang === 'en' ? 'Action' : '動作'}:</strong> ${mandate.action}</div>
-          <div><strong>${currentLang === 'en' ? 'Status' : '狀態'}:</strong> ${approved.status}</div>
-          <div><strong>${currentLang === 'en' ? 'Approved' : '已批准'}:</strong> ${new Date(approved.approvedAt).toLocaleString()}</div>
-        `;
+          <div><strong>${lang === 'en' ? 'Mandate ID' : '授權 ID'}:</strong> ${pendingMandate.id}</div>
+          <div><strong>${lang === 'en' ? 'Merchant' : '商家'}:</strong> ${pendingMandate.merchant}</div>
+          <div><strong>${lang === 'en' ? 'Action' : '動作'}:</strong> ${pendingMandate.action}</div>
+          <div><strong>${lang === 'en' ? 'Status' : '狀態'}:</strong> ${pendingMandate.status}</div>`;
 
-        await sleep(500);
-
-        // Step 4: Execute (80%)
-        updateProgress(80, currentLang === 'en' ? 'Executing cancellation...' : '執行取消中...');
-        const executor = new MockExecutor();
-        const result = await executor.execute(approved, {
-          subscriptionDetails: topRec.subscription
-        });
-
-        if (result.success) {
-          demoData.mandateManager.executeMandate(mandate.id, result);
-
-          document.getElementById('execution').innerHTML = `
-            <div class="execution-box">
-              <div><strong>✅ ${currentLang === 'en' ? 'Execution Successful' : '執行成功'}</strong></div>
-              <div style="margin: 10px 0; color: #2d3748;">${result.message}</div>
-              <div><strong>${currentLang === 'en' ? 'Confirmation' : '確認'}:</strong> ${result.evidence.confirmationId}</div>
-              <div><strong>${currentLang === 'en' ? 'Steps' : '步驟'}:</strong> ${result.evidence.steps.length}</div>
-              <div><strong>${currentLang === 'en' ? 'Duration' : '時長'}:</strong> ${result.evidence.duration}ms</div>
-              <ul class="execution-steps" style="margin-top: 10px;">
-                ${result.evidence.steps.slice(0, 5).map(s => `<li>${s.action}</li>`).join('')}
-              </ul>
-            </div>
-          `;
-        }
-
-        await sleep(500);
-
-        // Step 5: Audit Log (100%)
-        updateProgress(100, currentLang === 'en' ? 'Recording audit log...' : '記錄審計日誌中...');
-        const auditLog = demoData.mandateManager.getAuditLog();
-        const entries = auditLog.getAllEntries();
-
-        const auditHtml = entries.map((entry, i) => `
-          <div class="audit-entry">
-            <strong>${i + 1}. ${entry.action} - ${entry.result}</strong>
-            <div>${currentLang === 'en' ? 'Actor' : '執行者'}: ${entry.actor}</div>
-            <div>${currentLang === 'en' ? 'Time' : '時間'}: ${new Date(entry.timestamp).toLocaleString()}</div>
-          </div>
-        `).join('');
-
-        document.getElementById('auditLog').innerHTML = auditHtml;
-
+        updateProgress(60, t(lang, 'judge.pause'));
         progressContainer.style.display = 'none';
-        btn.style.display = 'block';
-        btn.textContent = currentLang === 'en' ? '✅ Demo Complete!' : '✅ 展示完成！';
-        btn.style.background = '#48bb78';
-        btn.disabled = false;
 
+        const slot = document.getElementById('approvalSlot');
+        slot.innerHTML = `
+          <section class="sx-approval" role="region" aria-labelledby="judgeApprovalTitle" tabindex="-1">
+            <div class="sx-approval__header">
+              <span class="sx-approval__kicker">${t(lang, 'approval.kicker')}</span>
+              <h3 class="sx-approval__title" id="judgeApprovalTitle">${pendingMandate.action} ${pendingMandate.merchant}</h3>
+            </div>
+            <dl class="sx-approval__facts">
+              <dt>${t(lang, 'approval.what')}</dt><dd>${pendingMandate.action} ${pendingMandate.merchant}</dd>
+              <dt>${t(lang, 'approval.scope')}</dt><dd>${pendingMandate.scope}</dd>
+              <dt>${t(lang, 'approval.limit')}</dt><dd class="sx-num">US$ ${Number(pendingMandate.maxAmount).toFixed(2)}</dd>
+              <dt>${t(lang, 'approval.expires')}</dt><dd class="sx-num">${new Date(pendingMandate.expiresAt).toLocaleString()}</dd>
+              <dt>${t(lang, 'approval.executedBy')}</dt><dd>MockExecutor · offline</dd>
+            </dl>
+            <div class="sx-approval__footer">
+              <button type="button" class="sx-btn sx-btn--primary" data-testid="approve-mandate" id="approveMandateBtn">${t(lang, 'judge.approve')}</button>
+              <button type="button" class="sx-btn sx-btn--ghost" id="judgeNotNow">${t(lang, 'approval.notNow')}</button>
+            </div>
+            <p class="sx-approval__reassure">${t(lang, 'approval.reassure')}</p>
+          </section>`;
+        slot.querySelector('.sx-approval').focus();
+
+        await new Promise((resolve) => {
+          document.getElementById('approveMandateBtn').onclick = () => resolve(true);
+          document.getElementById('judgeNotNow').onclick = () => {
+            btn.style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = t(lang, 'judge.run');
+            slot.innerHTML = '';
+            resolve(false);
+          };
+        }).then(async (ok) => {
+          if (!ok) return;
+
+          progressContainer.style.display = 'block';
+          updateProgress(80, lang === 'en' ? 'Executing cancellation...' : '執行取消中...');
+          setJudgeStep(3);
+
+          const approved = demoData.mandateManager.approveMandate(pendingMandate.id, 'user_signature_demo');
+          document.getElementById('mandate').innerHTML += `<div><strong>${lang === 'en' ? 'Approved' : '已批准'}:</strong> ${new Date(approved.approvedAt).toLocaleString()}</div>`;
+
+          const executor = new MockExecutor();
+          const result = await executor.execute(approved, { subscriptionDetails: pendingRec.subscription });
+
+          if (result.success) {
+            demoData.mandateManager.executeMandate(pendingMandate.id, result);
+            setJudgeStep(4);
+            document.getElementById('execution').innerHTML = `
+              <div class="execution-box">
+                <div><strong>${lang === 'en' ? 'Execution Successful' : '執行成功'}</strong></div>
+                <div style="margin: 10px 0;">${result.message}</div>
+                <div><strong>${lang === 'en' ? 'Confirmation' : '確認'}:</strong> ${result.evidence.confirmationId}</div>
+                <div><strong>${lang === 'en' ? 'Steps' : '步驟'}:</strong> ${result.evidence.steps.length}</div>
+                <div><strong>${lang === 'en' ? 'Duration' : '時長'}:</strong> ${result.evidence.duration}ms</div>
+              </div>`;
+          }
+
+          updateProgress(100, lang === 'en' ? 'Recording audit log...' : '記錄審計日誌中...');
+          const entries = demoData.mandateManager.getAuditLog().getAllEntries();
+          document.getElementById('auditLog').innerHTML = entries.map((entry, i) => `
+            <div class="audit-entry">
+              <strong>${i + 1}. ${entry.action} - ${entry.result}</strong>
+              <div>${lang === 'en' ? 'Actor' : '執行者'}: ${entry.actor}</div>
+              <div class="sx-num">${new Date(entry.timestamp).toLocaleString()}</div>
+            </div>`).join('');
+
+          slot.innerHTML = '';
+          progressContainer.style.display = 'none';
+          btn.style.display = 'block';
+          btn.disabled = false;
+          btn.textContent = lang === 'en' ? 'Demo Complete' : '展示完成';
+        });
       } catch (error) {
         progressContainer.style.display = 'none';
         btn.style.display = 'block';
-        btn.textContent = currentLang === 'en' ? '❌ Demo Failed' : '❌ 展示失敗';
-        btn.style.background = '#f56565';
         btn.disabled = false;
+        btn.textContent = lang === 'en' ? 'Demo Failed' : '展示失敗';
         console.error(error);
       }
     };
 
-    window.toggleLanguage = function() {
-      currentLang = currentLang === 'en' ? 'zh-TW' : 'en';
-      document.getElementById('langText').textContent = currentLang === 'en' ? '中文' : 'English';
-      updateI18n();
-    };
-
-    function updateI18n() {
-      document.querySelectorAll('[data-i18n]').forEach(el => {
-        const key = el.getAttribute('data-i18n');
-        const keys = key.split('.');
-        let value = i18n[currentLang];
-        for (const k of keys) {
-          value = value[k];
-        }
-        el.textContent = value;
-      });
-    }
-
-    function sleep(ms) {
-      return new Promise(resolve => setTimeout(resolve, ms));
-    }
-
-    init();
+    document.addEventListener('sx:lang', () => applyI18n(document));
   </script>
 </body>
 </html>

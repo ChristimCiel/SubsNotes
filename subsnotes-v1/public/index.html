@@ -1,645 +1,373 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-product="subsnotes">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SubsNotes v1 - AI Subscription Manager</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    
-    :root {
-      --primary: #667eea;
-      --primary-dark: #5568d3;
-      --secondary: #48bb78;
-      --danger: #f56565;
-      --warning: #ed8936;
-      --bg: #f7fafc;
-      --card: #ffffff;
-      --text: #2d3748;
-      --text-muted: #718096;
-      --border: #e2e8f0;
-    }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.6;
-    }
-
-    .nav {
-      background: white;
-      border-bottom: 1px solid var(--border);
-      padding: 20px;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    }
-
-    .nav-content {
-      max-width: 1200px;
-      margin: 0 auto;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .logo {
-      font-size: 24px;
-      font-weight: bold;
-      color: var(--primary);
-    }
-
-    .nav-links {
-      display: flex;
-      gap: 20px;
-      align-items: center;
-    }
-
-    .nav-link {
-      color: var(--text-muted);
-      text-decoration: none;
-      transition: color 0.2s;
-    }
-
-    .nav-link:hover { color: var(--primary); }
-
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 30px 20px;
-    }
-
-    .hero {
-      text-align: center;
-      padding: 60px 20px;
-      background: linear-gradient(135deg, var(--primary) 0%, #764ba2 100%);
-      color: white;
-      border-radius: 16px;
-      margin-bottom: 40px;
-    }
-
-    .hero h1 {
-      font-size: 48px;
-      margin-bottom: 20px;
-    }
-
-    .hero p {
-      font-size: 20px;
-      opacity: 0.9;
-      max-width: 600px;
-      margin: 0 auto 30px;
-    }
-
-    .hero-buttons {
-      display: flex;
-      gap: 15px;
-      justify-content: center;
-      flex-wrap: wrap;
-    }
-
-    .btn {
-      padding: 12px 30px;
-      border: none;
-      border-radius: 8px;
-      font-size: 16px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s;
-      text-decoration: none;
-      display: inline-block;
-    }
-
-    .btn-primary {
-      background: var(--secondary);
-      color: white;
-    }
-
-    .btn-primary:hover { background: #38a169; }
-
-    .btn-secondary {
-      background: white;
-      color: var(--primary);
-    }
-
-    .btn-secondary:hover { background: var(--bg); }
-
-    .pricing-note {
-      background: rgba(255,255,255,0.2);
-      padding: 15px;
-      border-radius: 8px;
-      margin-top: 20px;
-      font-size: 14px;
-    }
-
-    .section {
-      margin-bottom: 40px;
-    }
-
-    .section-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 20px;
-    }
-
-    .section-header h2 {
-      font-size: 24px;
-    }
-
-    .card {
-      background: var(--card);
-      border-radius: 12px;
-      padding: 25px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-      margin-bottom: 20px;
-    }
-
-    .budget-card {
-      background: linear-gradient(135deg, var(--primary) 0%, #764ba2 100%);
-      color: white;
-    }
-
-    .budget-stats {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 20px;
-      margin-top: 20px;
-    }
-
-    .stat {
-      text-align: center;
-      padding: 15px;
-      background: rgba(255,255,255,0.1);
-      border-radius: 8px;
-    }
-
-    .stat-label {
-      font-size: 14px;
-      opacity: 0.9;
-      margin-bottom: 8px;
-    }
-
-    .stat-value {
-      font-size: 32px;
-      font-weight: bold;
-    }
-
-    .progress-bar {
-      background: rgba(255,255,255,0.2);
-      border-radius: 20px;
-      height: 12px;
-      margin-top: 20px;
-      overflow: hidden;
-    }
-
-    .progress-fill {
-      background: var(--secondary);
-      height: 100%;
-      border-radius: 20px;
-      transition: width 0.3s;
-    }
-
-    .subscription-list {
-      display: grid;
-      gap: 15px;
-    }
-
-    .subscription-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 20px;
-      background: var(--card);
-      border: 2px solid var(--border);
-      border-radius: 10px;
-      transition: all 0.2s;
-    }
-
-    .subscription-item:hover {
-      border-color: var(--primary);
-      box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
-    }
-
-    .subscription-info {
-      flex: 1;
-    }
-
-    .subscription-name {
-      font-size: 18px;
-      font-weight: 600;
-      margin-bottom: 5px;
-    }
-
-    .subscription-meta {
-      color: var(--text-muted);
-      font-size: 14px;
-    }
-
-    .subscription-actions {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-    }
-
-    .badge {
-      padding: 6px 12px;
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 600;
-      text-transform: uppercase;
-    }
-
-    .badge-warning {
-      background: #fef5e7;
-      color: var(--warning);
-    }
-
-    .badge-danger {
-      background: #fee;
-      color: var(--danger);
-    }
-
-    .badge-success {
-      background: #f0fff4;
-      color: var(--secondary);
-    }
-
-    .modal {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.5);
-      z-index: 1000;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .modal.active { display: flex; }
-
-    .modal-content {
-      background: white;
-      padding: 30px;
-      border-radius: 16px;
-      max-width: 600px;
-      max-height: 80vh;
-      overflow-y: auto;
-      margin: 20px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-    }
-
-    .modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 20px;
-    }
-
-    .modal-header h3 {
-      font-size: 24px;
-    }
-
-    .close-btn {
-      background: none;
-      border: none;
-      font-size: 24px;
-      cursor: pointer;
-      color: var(--text-muted);
-    }
-
-    .recommendation-card {
-      background: var(--bg);
-      border-left: 4px solid var(--primary);
-      padding: 20px;
-      border-radius: 8px;
-      margin-bottom: 15px;
-    }
-
-    .recommendation-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: start;
-      margin-bottom: 10px;
-    }
-
-    .recommendation-type {
-      font-weight: 600;
-      text-transform: uppercase;
-      font-size: 14px;
-    }
-
-    .confidence {
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-
-    .reasons {
-      margin: 15px 0;
-      padding-left: 20px;
-    }
-
-    .reasons li {
-      margin: 8px 0;
-      color: var(--text-muted);
-    }
-
-    .lang-switcher {
-      cursor: pointer;
-      padding: 8px 15px;
-      border-radius: 6px;
-      border: 1px solid var(--border);
-      background: white;
-    }
-
-    .footer {
-      text-align: center;
-      padding: 40px 20px;
-      color: var(--text-muted);
-      font-size: 14px;
-      border-top: 1px solid var(--border);
-      margin-top: 60px;
-    }
-
-    @media (max-width: 768px) {
-      .hero h1 { font-size: 36px; }
-      .hero p { font-size: 18px; }
-      .budget-stats { grid-template-columns: 1fr; }
-      .subscription-item { flex-direction: column; align-items: start; gap: 15px; }
-    }
-  </style>
+  <title>SubsNotes — Keep the AI tools you use</title>
+  <link rel="stylesheet" href="./suite.css">
 </head>
-<body>
-  <nav class="nav">
-    <div class="nav-content">
-      <div class="logo">💳 SubsNotes</div>
-      <div class="nav-links">
-        <a href="#" class="nav-link" onclick="showDashboard(); return false;">Dashboard</a>
-        <a href="judge.html" class="nav-link">Judge Mode</a>
-        <a href="supervised.html" class="nav-link">T1 Demo</a>
-        <a href="assistant.html" class="nav-link">Getting Started</a>
-        <a href="fictional-merchant.html" class="nav-link" target="_blank">Demo Site</a>
-        <select class="lang-switcher" id="langSwitch" onchange="switchLanguage()">
-          <option value="en">English</option>
-          <option value="zh-TW">繁體中文</option>
-        </select>
-      </div>
-    </div>
-  </nav>
+<body class="sx-shell">
+  <div id="shell-nav"></div>
 
-  <div class="container">
-    <div class="hero">
-      <h1 data-i18n="hero.title">AI-Powered Subscription Manager</h1>
-      <p data-i18n="hero.description">
-        Reduce decision fatigue and stay within budget. Your AI agent monitors subscriptions, 
-        recommends actions, and executes with your explicit approval.
-      </p>
-      <div class="hero-buttons">
-        <button class="btn btn-primary" onclick="showJudgeMode()" data-i18n="hero.tryDemo">Try Judge Mode Demo</button>
-        <button class="btn btn-secondary" onclick="showLearnMore()" data-i18n="hero.learnMore">Learn More</button>
-      </div>
-      <div class="pricing-note">
-        <strong data-i18n="hero.pricing">Pricing:</strong> <span data-i18n="hero.pricingDetails">US$30/month when available. All interactions in this MVP are virtual/fictional.</span>
-      </div>
-    </div>
-
-    <!-- Budget Section -->
-    <div class="section" id="budgetSection">
-      <div class="section-header">
-        <h2 data-i18n="budget.title">Your Monthly Budget</h2>
-        <button class="btn btn-primary" onclick="showBudgetSettings()" data-i18n="budget.adjust">Adjust Budget</button>
-      </div>
-      
-      <div class="card budget-card">
-        <h3 data-i18n="budget.envelope">Budget Envelope</h3>
-        <div class="budget-stats">
-          <div class="stat">
-            <div class="stat-label" data-i18n="budget.limit">Monthly Limit</div>
-            <div class="stat-value" id="budgetLimit">$0.00</div>
-          </div>
-          <div class="stat">
-            <div class="stat-label" data-i18n="budget.allocated">Allocated</div>
-            <div class="stat-value" id="budgetAllocated">$0.00</div>
-          </div>
-          <div class="stat">
-            <div class="stat-label" data-i18n="budget.remaining">Remaining</div>
-            <div class="stat-value" id="budgetRemaining">$0.00</div>
-          </div>
+  <main class="sx-main">
+    <section class="sx-hero" id="hero">
+      <div class="sx-hero__copy">
+        <p class="sx-eyebrow" data-i18n="hero.eyebrow">For people who pay for too many AI tools</p>
+        <h1 class="sx-h1" data-i18n="hero.h1">Keep the AI tools you use. Drop the rest.</h1>
+        <p class="sx-sub" data-i18n="hero.sub">SubsNotes finds overlapping subscriptions, explains why, and cancels only what you approve.</p>
+        <div class="sx-row">
+          <a class="sx-btn sx-btn--primary" href="#findings" data-i18n="hero.cta">Review 3 findings</a>
+          <a class="sx-btn sx-btn--ghost" href="#safety" data-i18n="hero.secondary">How it stays safe</a>
         </div>
-        <div class="progress-bar">
-          <div class="progress-fill" id="budgetProgress" style="width: 0%"></div>
+        <div style="margin-top: var(--sx-4)">
+          <span class="sx-chip" data-i18n="chip.sample">Sample data · fictional</span>
         </div>
-        <p style="margin-top: 15px; font-size: 14px; opacity: 0.9;" data-i18n="budget.note">
-          Note: No money is held. Licensed-partner wallets coming in future versions.
-        </p>
       </div>
-    </div>
-
-    <!-- Recommendations Section -->
-    <div class="section" id="recommendationsSection">
-      <div class="section-header">
-        <h2 data-i18n="recommendations.title">AI Recommendations</h2>
-        <button class="btn btn-secondary" onclick="refreshRecommendations()" data-i18n="recommendations.refresh">Refresh</button>
+      <div class="sx-hero__artifact">
+        <div class="sx-card" id="snapshot">
+          <div class="sx-stat">
+            <span class="sx-stat__label"><span data-i18n="snapshot.month">This month</span></span>
+            <span class="sx-stat__value sx-num">US$ <span id="snapSpent">0.00</span> <span data-i18n="snapshot.of">of</span> US$ <span id="snapEnvelope">0.00</span> <span data-i18n="snapshot.envelope">envelope</span></span>
+          </div>
+          <div class="sx-util-bar" style="margin: var(--sx-3) 0" aria-hidden="true"><span id="snapBar" style="width:0%"></span></div>
+          <p class="sx-muted" style="margin:0">
+            <span class="sx-num" id="snapReview">0</span> <span data-i18n="snapshot.review">to review</span>
+            · <span data-i18n="snapshot.saving">potential saving</span> US$ <span class="sx-num" id="snapSaving">0.00</span>/mo
+          </p>
+          <p class="sx-muted" style="margin: var(--sx-2) 0 0">
+            <span class="sx-num" id="snapTools">0</span> <span data-i18n="snapshot.tools">tools</span>
+            · <span class="sx-num" id="snapOverlaps">0</span> <span data-i18n="snapshot.overlaps">overlaps</span>
+            · <span class="sx-num" id="snapUnused">0</span> <span data-i18n="snapshot.unused">unused</span>
+          </p>
+        </div>
       </div>
-      <div id="recommendationsList"></div>
-    </div>
+    </section>
 
-    <!-- Subscriptions Section -->
-    <div class="section" id="subscriptionsSection">
-      <div class="section-header">
-        <h2 data-i18n="subscriptions.title">Your Subscriptions</h2>
-        <button class="btn btn-primary" onclick="addSubscription()" data-i18n="subscriptions.add">+ Add</button>
+    <ol class="sx-stepper" id="loopStepper" aria-label="Closed loop" aria-live="polite">
+      <li class="is-done" data-i18n="step.detect">Detect</li>
+      <li class="is-done" data-i18n="step.judge">Judge</li>
+      <li class="is-active" data-i18n="step.approve">Approve</li>
+      <li class="is-todo" data-i18n="step.execute">Execute</li>
+      <li class="is-todo" data-i18n="step.verify">Verify</li>
+    </ol>
+
+    <section class="sx-section" id="findings">
+      <h2 class="sx-eyebrow" style="font-size: var(--sx-text-sm); text-transform: none; letter-spacing: 0;" data-i18n="findings.title">Findings</h2>
+      <div id="findingsQueue"></div>
+      <div id="approvalHost"></div>
+      <div id="receiptHost" class="hidden"></div>
+      <div id="doneHost" class="hidden sx-card" style="margin-top: var(--sx-4)">
+        <p data-i18n="findings.done">You're within your envelope this month.</p>
+        <div class="sx-row">
+          <a class="sx-btn sx-btn--primary" href="supervised.html" data-i18n="findings.guided">Try a guided cancel yourself</a>
+          <button type="button" class="sx-btn sx-btn--ghost" id="viewAuditBtn" data-i18n="findings.audit">View audit log</button>
+        </div>
+        <details class="sx-disclosure" id="auditDisclosure" style="margin-top: var(--sx-4)">
+          <summary data-i18n="findings.audit">View audit log</summary>
+          <div id="auditLog"></div>
+        </details>
       </div>
-      <div class="subscription-list" id="subscriptionsList"></div>
-    </div>
-  </div>
+    </section>
 
-  <!-- Mandate Modal -->
-  <div id="mandateModal" class="modal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3 data-i18n="mandate.title">Approve Action</h3>
-        <button class="close-btn" onclick="closeMandateModal()">&times;</button>
+    <section class="sx-section" id="budget">
+      <div class="sx-card">
+        <div class="sx-row" style="justify-content: space-between">
+          <strong data-i18n="budget.title">Budget envelope</strong>
+          <span class="sx-chip" data-i18n="budget.note">No money is held</span>
+        </div>
+        <div class="sx-row" style="margin-top: var(--sx-3)">
+          <button type="button" class="sx-btn sx-btn--secondary sx-btn--compact" id="budgetMinus" aria-label="Decrease envelope">−</button>
+          <span class="sx-num" style="font-size: var(--sx-text-xl)">US$ <span id="budgetValue">100</span></span>
+          <button type="button" class="sx-btn sx-btn--secondary sx-btn--compact" id="budgetPlus" aria-label="Increase envelope">+</button>
+        </div>
+        <div class="sx-util-bar" style="margin-top: var(--sx-3)"><span id="budgetBar" style="width:0%"></span></div>
+        <details class="sx-disclosure" style="margin-top: var(--sx-4); border-top: 0; padding-top: 0">
+          <summary data-i18n="budget.note">No money is held</summary>
+          <p data-i18n="budget.held">Licensed-partner wallets come later. This envelope only tracks capacity.</p>
+        </details>
       </div>
-      <div id="mandateContent"></div>
-    </div>
-  </div>
+    </section>
 
-  <!-- Learn More Modal -->
-  <div id="learnMoreModal" class="modal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3 data-i18n="learnMore.title">How SubsNotes Works</h3>
-        <button class="close-btn" onclick="closeLearnMoreModal()">&times;</button>
+    <section class="sx-section" id="safety">
+      <h2 class="sx-eyebrow" style="font-size: var(--sx-text-sm); text-transform: none; letter-spacing: 0;" data-i18n="safety.title">How it stays safe</h2>
+      <div class="sx-grid-2" style="margin-top: var(--sx-3)">
+        <div class="sx-safety-item"><strong data-i18n="safety.1t"></strong><p data-i18n="safety.1d"></p></div>
+        <div class="sx-safety-item"><strong data-i18n="safety.2t"></strong><p data-i18n="safety.2d"></p></div>
+        <div class="sx-safety-item"><strong data-i18n="safety.3t"></strong><p data-i18n="safety.3d"></p></div>
+        <div class="sx-safety-item"><strong data-i18n="safety.4t"></strong><p data-i18n="safety.4d"></p></div>
       </div>
-      <div>
-        <h4 data-i18n="learnMore.loop">The Closed Loop</h4>
-        <ol style="margin: 15px 0; padding-left: 25px;">
-          <li data-i18n="learnMore.step1"><strong>Detect:</strong> AI reads receipts (locally) and builds your subscription list</li>
-          <li data-i18n="learnMore.step2"><strong>Judge:</strong> AI evaluates against your budget and usage patterns</li>
-          <li data-i18n="learnMore.step3"><strong>Recommend:</strong> AI suggests keep/downgrade/cancel with clear reasons</li>
-          <li data-i18n="learnMore.step4"><strong>Approve:</strong> You approve actions via explicit mandates</li>
-          <li data-i18n="learnMore.step5"><strong>Execute:</strong> AI agent performs the action within mandate limits</li>
-          <li data-i18n="learnMore.step6"><strong>Verify:</strong> AI confirms completion and records evidence</li>
-        </ol>
+      <details class="sx-disclosure" style="margin-top: var(--sx-4)">
+        <summary data-i18n="safety.tiers">Execution tiers (T0 / T1 / T2)</summary>
+        <p>T0 deep links (Apple, Google Play, LINE Pay, 全支付, 街口). T1 supervised step-by-step. T2 autonomous Playwright within a mandate — demoed only on the fictional merchant.</p>
+      </details>
+      <details class="sx-disclosure">
+        <summary data-i18n="safety.limits">Known limits</summary>
+        <p>Apple / Google Play subscriptions stay deep-link only. No real money, real accounts, or live merchant cancellations in this MVP.</p>
+      </details>
+    </section>
 
-        <h4 style="margin-top: 25px;" data-i18n="learnMore.security">Security & Privacy</h4>
-        <ul style="margin: 15px 0; padding-left: 25px; list-style: disc;">
-          <li data-i18n="learnMore.securityNote1">Your local AI agent reads receipts locally and sends only signed summaries</li>
-          <li data-i18n="learnMore.securityNote2">Ed25519 signatures prevent tampering and prompt injection</li>
-          <li data-i18n="learnMore.securityNote3">No passwords stored; login and 2FA are user-present</li>
-          <li data-i18n="learnMore.securityNote4">Append-only audit log tracks all actions</li>
-        </ul>
+    <section class="sx-section">
+      <p class="sx-muted" data-i18n="close.price">US$30/month when available. Today everything here is a fictional sample.</p>
+      <a class="sx-btn sx-btn--ghost" href="supervised.html" data-i18n="findings.guided">Try a guided cancel yourself</a>
+    </section>
+  </main>
 
-        <h4 style="margin-top: 25px;" data-i18n="learnMore.execution">Execution Tiers</h4>
-        <ul style="margin: 15px 0; padding-left: 25px; list-style: disc;">
-          <li data-i18n="learnMore.tier0"><strong>T0:</strong> Deep links (Apple App Store, Google Play, LINE Pay, 全支付 JKO Pay, 街口支付 Jkopay)</li>
-          <li data-i18n="learnMore.tier1"><strong>T1:</strong> Supervised step-by-step guidance</li>
-          <li data-i18n="learnMore.tier2"><strong>T2:</strong> Autonomous execution (demo only in this MVP)</li>
-        </ul>
-
-        <h4 style="margin-top: 25px;" data-i18n="learnMore.limitations">Known Limitations</h4>
-        <ul style="margin: 15px 0; padding-left: 25px; list-style: disc;">
-          <li data-i18n="learnMore.limit1">Apple/Google Play subscriptions are deep-link only</li>
-          <li data-i18n="learnMore.limit2">Some merchants have dark patterns (retention offers, hidden buttons)</li>
-          <li data-i18n="learnMore.limit3">All data in this MVP is fictional/virtual</li>
-        </ul>
-      </div>
-    </div>
-  </div>
-
-  <div class="footer">
-    <p>SubsNotes v1 MVP - Built for OPEN LAB 2026 AI Build Challenge</p>
-    <p style="margin-top: 10px;">All subscriptions, amounts, and merchants in this demo are fictional.</p>
-  </div>
+  <div id="shell-footer"></div>
 
   <script type="module">
-    import { createBudget, allocateBudget, calculateMetrics, getBudgetSummary } from './budget.mjs';
-    import { generateRecommendation, batchAnalyze } from './recommendations.mjs';
-    import { MandateManager } from './mandates.mjs';
+    import { createJudgeData, generateJudgeRecommendations, getStackSnapshot } from '/src/judge-mode.mjs';
+    import { MockExecutor } from '/src/mock-executor.mjs';
+    import { navHtml, footerHtml, wireShell, showToast } from './shell.mjs';
+    import { applyI18n, t } from './i18n.mjs';
 
-    // Will be loaded dynamically
-    window.SubsNotes = {
-      budget: null,
-      subscriptions: [],
-      mandateManager: new MandateManager(),
-      currentLang: 'en',
-      i18n: {}
-    };
+    document.getElementById('shell-nav').innerHTML = navHtml({ active: 'overview' });
+    document.getElementById('shell-footer').innerHTML = footerHtml();
+    const shell = wireShell({ page: 'overview' });
 
-    async function init() {
-      await loadI18n();
-      loadDemoData();
-      renderBudget();
-      renderSubscriptions();
-      renderRecommendations();
+    const demo = createJudgeData();
+    let recommendations = generateJudgeRecommendations(demo.subscriptions, demo.budget);
+    let snapshot = getStackSnapshot(demo.budget, recommendations);
+    let focusIndex = 0;
+    let completed = [];
+
+    function money(n) { return Number(n).toFixed(2); }
+
+    function refreshSnapshot() {
+      snapshot = getStackSnapshot(demo.budget, recommendations);
+      document.getElementById('snapSpent').textContent = money(snapshot.spent);
+      document.getElementById('snapEnvelope').textContent = money(snapshot.envelope);
+      document.getElementById('snapReview').textContent = String(Math.max(0, snapshot.reviewCount - completed.length));
+      document.getElementById('snapSaving').textContent = money(snapshot.potentialSaving);
+      document.getElementById('snapTools').textContent = String(snapshot.tools);
+      document.getElementById('snapOverlaps').textContent = String(snapshot.overlaps);
+      document.getElementById('snapUnused').textContent = String(snapshot.unused);
+      const pct = Math.min(100, (snapshot.spent / snapshot.envelope) * 100);
+      document.getElementById('snapBar').style.width = pct + '%';
+      document.getElementById('budgetValue').textContent = String(Math.round(demo.budget.monthlyLimit));
+      document.getElementById('budgetBar').style.width = pct + '%';
     }
 
-    async function loadI18n() {
-      // Simplified i18n - would load from separate files in production
-      window.SubsNotes.i18n = {
-        en: { /* English translations */ },
-        'zh-TW': { /* Traditional Chinese translations */ }
-      };
-    }
-
-    function loadDemoData() {
-      // Create demo budget
-      window.SubsNotes.budget = createBudget(100);
-      
-      // Add demo subscriptions
-      const demoSubs = [
-        { merchant: 'Netflix', amount: 15.99, cadence: 'monthly', status: 'active' },
-        { merchant: 'Spotify', amount: 9.99, cadence: 'monthly', status: 'active' },
-        { merchant: 'GitHub Pro', amount: 84.00, cadence: 'annual', status: 'active', essentialService: true }
-      ];
-
-      demoSubs.forEach(sub => {
-        window.SubsNotes.budget = allocateBudget(window.SubsNotes.budget, sub);
+    function setStepper(phase) {
+      const nodes = [...document.querySelectorAll('#loopStepper li')];
+      const order = ['detect', 'judge', 'approve', 'execute', 'verify'];
+      const idx = order.indexOf(phase);
+      nodes.forEach((n, i) => {
+        n.classList.remove('is-done', 'is-active', 'is-todo');
+        if (i < idx) n.classList.add('is-done');
+        else if (i === idx) n.classList.add('is-active');
+        else n.classList.add('is-todo');
       });
     }
 
-    function renderBudget() {
-      const summary = getBudgetSummary(window.SubsNotes.budget);
-      document.getElementById('budgetLimit').textContent = summary.limit;
-      document.getElementById('budgetAllocated').textContent = summary.allocated;
-      document.getElementById('budgetRemaining').textContent = summary.remaining;
-      
-      const utilization = parseFloat(summary.utilizationPercent);
-      document.getElementById('budgetProgress').style.width = Math.min(utilization, 100) + '%';
-      
-      if (utilization > 100) {
-        document.getElementById('budgetProgress').style.background = 'var(--danger)';
-      } else if (utilization > 90) {
-        document.getElementById('budgetProgress').style.background = 'var(--warning)';
+    function findingTitle(rec, lang) {
+      const type = rec.recommendation.type;
+      const merchant = rec.subscription.merchant;
+      if (type === 'cancel' && (rec.recommendation.risks || []).includes('duplicate')) {
+        const other = (rec.recommendation.reasons.find((r) => r.startsWith('Similar')) || '').replace('Similar services: ', '');
+        return lang === 'zh-TW'
+          ? `取消 ${merchant} — 與 ${other || '同類工具'} 重疊`
+          : `Cancel ${merchant} — overlaps with ${other || 'another tool'}`;
       }
+      if (type === 'cancel') return lang === 'zh-TW' ? `取消 ${merchant}` : `Cancel ${merchant}`;
+      if (type === 'downgrade') return lang === 'zh-TW' ? `降級 ${merchant}` : `Downgrade ${merchant}`;
+      return merchant;
     }
 
-    function renderSubscriptions() {
-      const list = document.getElementById('subscriptionsList');
-      const subs = window.SubsNotes.budget.allocations.filter(a => a.status === 'active');
-      
-      list.innerHTML = subs.map(sub => `
-        <div class="subscription-item">
-          <div class="subscription-info">
-            <div class="subscription-name">${sub.merchant}</div>
-            <div class="subscription-meta">
-              $${sub.amount}/${sub.cadence} · $${sub.monthlyAmount}/mo equivalent
+    function renderFindings() {
+      const lang = shell.getLang();
+      const queue = snapshot.findings.filter((_, i) => !completed.includes(i));
+      const host = document.getElementById('findingsQueue');
+      if (!queue.length) {
+        host.innerHTML = '';
+        document.getElementById('doneHost').classList.remove('hidden');
+        setStepper('verify');
+        return;
+      }
+      document.getElementById('doneHost').classList.add('hidden');
+      const focus = queue[0];
+      const focusGlobal = snapshot.findings.indexOf(focus);
+      focusIndex = focusGlobal;
+
+      const rest = queue.slice(1).map((rec) => {
+        const i = snapshot.findings.indexOf(rec);
+        return `<div class="sx-finding-row" data-idx="${i}">
+          <span>${findingTitle(rec, lang)}</span>
+          <span class="sx-muted">US$ <span class="sx-num">${money(rec.subscription.amount)}</span>/mo</span>
+        </div>`;
+      }).join('');
+
+      const conf = focus.recommendation.confidence >= 0.85
+        ? t(lang, 'findings.confidenceHigh')
+        : t(lang, 'findings.confidenceMed');
+      const approveLabel = focus.recommendation.type === 'downgrade'
+        ? t(lang, 'findings.approveDowngrade')
+        : t(lang, 'findings.approveCancel');
+
+      host.innerHTML = `
+        <article class="sx-card sx-card--focus" id="focusFinding">
+          <div class="sx-row" style="justify-content: space-between; align-items: flex-start">
+            <div>
+              <h3 style="margin:0 0 var(--sx-2); font-size: var(--sx-text-lg)">${findingTitle(focus, lang)}</h3>
+              <p class="sx-muted" style="margin:0">
+                <span data-i18n="findings.saves">${t(lang, 'findings.saves')}</span>
+                US$ <span class="sx-num">${money(focus.subscription.amount)}</span>/mo
+                · ${conf}
+              </p>
             </div>
+            <span class="sx-status sx-status--caution">${focus.recommendation.type}</span>
           </div>
-          <div class="subscription-actions">
-            ${sub.essentialService ? '<span class="badge badge-success">Essential</span>' : ''}
-            <button class="btn btn-secondary" onclick="viewSubscription('${sub.id}')">Details</button>
+          <div class="sx-row" style="margin-top: var(--sx-4)">
+            <button type="button" class="sx-btn sx-btn--primary" id="approveFinding">${approveLabel}</button>
+            <button type="button" class="sx-btn sx-btn--ghost" id="keepFinding" data-i18n="findings.keep">${t(lang, 'findings.keep')}</button>
+            <button type="button" class="sx-btn sx-btn--ghost" id="snoozeFinding" data-i18n="findings.snooze">${t(lang, 'findings.snooze')}</button>
           </div>
-        </div>
-      `).join('');
+          <details class="sx-disclosure" style="margin-top: var(--sx-4)">
+            <summary data-i18n="findings.why">${t(lang, 'findings.why')}</summary>
+            <ul>${focus.recommendation.reasons.map((r) => `<li>${r}</li>`).join('')}</ul>
+          </details>
+        </article>
+        ${rest}`;
+
+      document.getElementById('approveFinding').onclick = () => openApproval(focus, focusGlobal);
+      document.getElementById('keepFinding').onclick = () => {
+        completed.push(focusGlobal);
+        showToast(t(lang, 'toast.kept'));
+        document.getElementById('approvalHost').innerHTML = '';
+        renderFindings();
+        refreshSnapshot();
+      };
+      document.getElementById('snoozeFinding').onclick = () => {
+        completed.push(focusGlobal);
+        showToast(t(lang, 'toast.snoozed'));
+        document.getElementById('approvalHost').innerHTML = '';
+        renderFindings();
+        refreshSnapshot();
+      };
+      setStepper('approve');
     }
 
-    function renderRecommendations() {
-      const list = document.getElementById('recommendationsList');
-      list.innerHTML = '<div class="card"><p>Loading recommendations...</p></div>';
-      // Would fetch and render actual recommendations
+    function openApproval(rec, idx) {
+      const lang = shell.getLang();
+      const future = new Date();
+      future.setDate(future.getDate() + 7);
+      const mandate = demo.mandateManager.createMandate({
+        merchant: rec.subscription.merchant,
+        action: rec.recommendation.type === 'downgrade' ? 'downgrade' : 'cancel',
+        scope: 'single',
+        maxAmount: rec.subscription.amount,
+        expiresAt: future.toISOString()
+      });
+
+      const host = document.getElementById('approvalHost');
+      host.innerHTML = `
+        <section class="sx-approval" role="region" aria-labelledby="approvalTitle" tabindex="-1">
+          <div class="sx-approval__header">
+            <span class="sx-approval__kicker" data-i18n="approval.kicker">${t(lang, 'approval.kicker')}</span>
+            <h3 class="sx-approval__title" id="approvalTitle">${findingTitle(rec, lang)}</h3>
+          </div>
+          <dl class="sx-approval__facts">
+            <dt data-i18n="approval.what">${t(lang, 'approval.what')}</dt>
+            <dd>${mandate.action} ${mandate.merchant}</dd>
+            <dt data-i18n="approval.scope">${t(lang, 'approval.scope')}</dt>
+            <dd>${mandate.scope}</dd>
+            <dt data-i18n="approval.limit">${t(lang, 'approval.limit')}</dt>
+            <dd class="sx-num">US$ ${money(mandate.maxAmount)}</dd>
+            <dt data-i18n="approval.expires">${t(lang, 'approval.expires')}</dt>
+            <dd class="sx-num">${new Date(mandate.expiresAt).toLocaleString()}</dd>
+            <dt data-i18n="approval.executedBy">${t(lang, 'approval.executedBy')}</dt>
+            <dd>MockExecutor · offline replay</dd>
+          </dl>
+          <div class="sx-approval__footer">
+            <button type="button" class="sx-btn sx-btn--primary" id="approveRun" data-i18n="approval.approveRun">${t(lang, 'approval.approveRun')}</button>
+            <button type="button" class="sx-btn sx-btn--ghost" id="notNow" data-i18n="approval.notNow">${t(lang, 'approval.notNow')}</button>
+          </div>
+          <p class="sx-approval__reassure" data-i18n="approval.reassure">${t(lang, 'approval.reassure')}</p>
+          <details class="sx-disclosure">
+            <summary data-i18n="approval.tech">${t(lang, 'approval.tech')}</summary>
+            <p class="sx-mono">mandate id: ${mandate.id}</p>
+          </details>
+        </section>`;
+
+      const region = host.querySelector('.sx-approval');
+      region.focus();
+      region.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+      document.getElementById('notNow').onclick = () => { host.innerHTML = ''; };
+      document.getElementById('approveRun').onclick = async () => {
+        setStepper('execute');
+        const btn = document.getElementById('approveRun');
+        btn.disabled = true;
+        btn.textContent = t(lang, 'approval.executing');
+        const approved = demo.mandateManager.approveMandate(mandate.id, 'user_signature_demo');
+        const executor = new MockExecutor();
+        const result = await executor.execute(approved, { subscriptionDetails: rec.subscription });
+        if (result.success) {
+          demo.mandateManager.executeMandate(mandate.id, result);
+          setStepper('verify');
+          completed.push(idx);
+          host.innerHTML = '';
+          const receipt = document.getElementById('receiptHost');
+          receipt.classList.remove('hidden');
+          receipt.innerHTML = `
+            <div class="sx-card sx-card--focus">
+              <p style="margin:0 0 var(--sx-3)">
+                <span class="sx-status sx-status--positive" data-i18n="receipt.cancelled">${t(lang, 'receipt.cancelled')}</span>
+                · <span class="sx-num">${result.evidence.confirmationId}</span>
+                · <span data-i18n="findings.saves">${t(lang, 'findings.saves')}</span>
+                US$ <span class="sx-num">${money(rec.subscription.amount)}</span>/mo
+              </p>
+              <div class="sx-row">
+                <button type="button" class="sx-btn sx-btn--primary" id="nextFinding" data-i18n="findings.next">${t(lang, 'findings.next')}</button>
+                <button type="button" class="sx-btn sx-btn--ghost" id="receiptAudit" data-i18n="findings.audit">${t(lang, 'findings.audit')}</button>
+              </div>
+            </div>`;
+          document.getElementById('nextFinding').onclick = () => {
+            receipt.classList.add('hidden');
+            renderFindings();
+            refreshSnapshot();
+          };
+          document.getElementById('receiptAudit').onclick = () => showAudit();
+          renderAudit();
+        }
+      };
     }
 
-    window.showJudgeMode = () => {
-      window.location.href = 'judge.html';
+    function renderAudit() {
+      const entries = demo.mandateManager.getAuditLog().getAllEntries();
+      document.getElementById('auditLog').innerHTML = entries.map((e, i) =>
+        `<div class="audit-entry"><strong>${i + 1}. ${e.action} — ${e.result}</strong><div>${e.actor}</div><div class="sx-num">${new Date(e.timestamp).toLocaleString()}</div></div>`
+      ).join('') || '<p class="sx-muted">—</p>';
+    }
+
+    function showAudit() {
+      document.getElementById('doneHost').classList.remove('hidden');
+      const d = document.getElementById('auditDisclosure');
+      d.open = true;
+      d.scrollIntoView({ behavior: 'smooth' });
+      renderAudit();
+    }
+
+    document.getElementById('viewAuditBtn')?.addEventListener('click', showAudit);
+    document.getElementById('budgetMinus').onclick = () => {
+      demo.budget.monthlyLimit = Math.max(10, demo.budget.monthlyLimit - 10);
+      recommendations = generateJudgeRecommendations(demo.subscriptions, demo.budget);
+      refreshSnapshot();
+      renderFindings();
+    };
+    document.getElementById('budgetPlus').onclick = () => {
+      demo.budget.monthlyLimit += 10;
+      recommendations = generateJudgeRecommendations(demo.subscriptions, demo.budget);
+      refreshSnapshot();
+      renderFindings();
     };
 
-    window.showLearnMore = () => {
-      document.getElementById('learnMoreModal').classList.add('active');
-    };
+    document.addEventListener('sx:lang', () => {
+      applyI18n(document);
+      renderFindings();
+    });
 
-    window.closeLearnMoreModal = () => {
-      document.getElementById('learnMoreModal').classList.remove('active');
-    };
-
-    window.showBudgetSettings = () => {
-      alert('Budget adjustment coming soon');
-    };
-
-    window.addSubscription = () => {
-      alert('Add subscription form coming soon');
-    };
-
-    window.refreshRecommendations = () => {
-      renderRecommendations();
-    };
-
-    window.viewSubscription = (id) => {
-      alert(`View subscription ${id}`);
-    };
-
-    window.switchLanguage = () => {
-      const lang = document.getElementById('langSwitch').value;
-      window.SubsNotes.currentLang = lang;
-      // Would update all i18n text
-    };
-
-    // Initialize on load
-    init();
+    refreshSnapshot();
+    renderFindings();
   </script>
 </body>
 </html>

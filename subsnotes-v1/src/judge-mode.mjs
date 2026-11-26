@@ -1,72 +1,88 @@
 /**
- * Judge Mode - One-click demo with preloaded fictional data
- * Works completely offline for competition judges
+ * Judge Mode + sample fixture data for the product demo.
+ * All merchants are fictional AI/SaaS tools (except Premium Streaming used by T1/T2 demos).
  */
 
-import { createBudget, allocateBudget, updateAllocationStatus } from './budget.mjs';
+import { createBudget, allocateBudget } from './budget.mjs';
 import { generateRecommendation } from './recommendations.mjs';
 import { MandateManager } from './mandates.mjs';
 import { MockExecutor } from './mock-executor.mjs';
 
 /**
- * Create judge mode demo data
+ * Create judge / overview demo data (fictional AI tool stack).
  */
 export function createJudgeData() {
-  // Create budget with fictional allocation
   let budget = createBudget(100);
 
   const subscriptions = [
     {
-      merchant: 'Netflix',
-      amount: 15.99,
+      merchant: 'Lumen Chat Plus',
+      amount: 20.00,
       cadence: 'monthly',
       status: 'active',
       nextDate: '2026-12-01',
+      category: 'Chat',
       priceHistory: [
-        { amount: 13.99, effectiveDate: '2025-01-01' },
-        { amount: 15.99, effectiveDate: '2026-11-01' }
+        { amount: 16.00, effectiveDate: '2025-01-01' },
+        { amount: 20.00, effectiveDate: '2026-11-01' }
       ]
     },
     {
-      merchant: 'Spotify',
-      amount: 9.99,
+      merchant: 'Quillmate Pro',
+      amount: 18.00,
       cadence: 'monthly',
       status: 'active',
-      nextDate: '2026-12-05',
-      category: 'Music'
+      nextDate: '2026-12-03',
+      category: 'Chat'
     },
     {
-      merchant: 'GitHub Pro',
-      amount: 84.00,
-      cadence: 'annual',
+      merchant: 'PromptForge Team',
+      amount: 29.00,
+      cadence: 'monthly',
       status: 'active',
-      nextDate: '2027-01-15',
-      essentialService: true,
-      category: 'Development'
+      nextDate: '2026-12-08',
+      category: 'Coding',
+      essentialService: true
     },
     {
-      merchant: 'Canva Pro',
-      amount: 12.99,
+      merchant: 'Pixelloom Studio',
+      amount: 15.00,
       cadence: 'monthly',
       status: 'active',
       nextDate: '2026-11-30',
+      category: 'Image',
       trial: {
         endsAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString()
-      },
-      category: 'Design'
+      }
     },
     {
-      merchant: 'Old Unused Service',
-      amount: 19.99,
+      merchant: 'Vectorly Notes',
+      amount: 10.00,
+      cadence: 'monthly',
+      status: 'active',
+      nextDate: '2026-12-12',
+      category: 'Notes'
+    },
+    {
+      merchant: 'Draftwise',
+      amount: 12.00,
       cadence: 'monthly',
       status: 'active',
       nextDate: '2026-12-10',
-      category: 'Other'
+      category: 'Notes'
+    },
+    {
+      merchant: 'CodePilot X',
+      amount: 24.00,
+      cadence: 'monthly',
+      status: 'active',
+      nextDate: '2026-12-15',
+      category: 'Coding',
+      essentialService: true
     }
   ];
 
-  // Allocate all subscriptions to budget
-  subscriptions.forEach(sub => {
+  subscriptions.forEach((sub) => {
     budget = allocateBudget(budget, sub);
   });
 
@@ -78,18 +94,22 @@ export function createJudgeData() {
 }
 
 /**
- * Generate recommendations for judge demo
+ * Generate recommendations for demo / overview.
  */
 export function generateJudgeRecommendations(subscriptions, budget) {
-  return subscriptions.map((sub, index) => {
-    const usageData = sub.merchant === 'Old Unused Service' 
-      ? { lastAccessDays: 75 } 
+  return subscriptions.map((sub) => {
+    const usageData = sub.merchant === 'Draftwise'
+      ? { lastAccessDays: 75 }
       : undefined;
+
+    const similarServices = subscriptions.filter(
+      (s) => s.merchant !== sub.merchant && s.category === sub.category
+    );
 
     const recommendation = generateRecommendation(sub, {
       budget,
       usageData,
-      similarServices: []
+      similarServices
     });
 
     return {
@@ -100,37 +120,51 @@ export function generateJudgeRecommendations(subscriptions, budget) {
 }
 
 /**
- * Run the complete judge mode demo
+ * Summarize stack metrics for the hero snapshot (deterministic).
+ */
+export function getStackSnapshot(budget, recommendations) {
+  const allocated = budget.allocations
+    .filter((a) => a.status === 'active')
+    .reduce((sum, a) => sum + (a.cadence === 'annual' ? a.amount / 12 : a.amount), 0);
+
+  const actionable = recommendations.filter((r) => r.recommendation.type !== 'keep');
+  const overlaps = recommendations.filter((r) =>
+    (r.recommendation.risks || []).includes('duplicate')
+  ).length;
+  const unused = recommendations.filter((r) =>
+    (r.recommendation.risks || []).includes('unused')
+  ).length;
+
+  const potentialSaving = actionable.reduce((sum, r) => {
+    if (r.recommendation.type === 'cancel' || r.recommendation.type === 'downgrade') {
+      const amt = r.subscription.cadence === 'annual'
+        ? r.subscription.amount / 12
+        : r.subscription.amount;
+      return sum + amt;
+    }
+    return sum;
+  }, 0);
+
+  return {
+    spent: allocated,
+    envelope: budget.monthlyLimit,
+    reviewCount: Math.min(3, actionable.length),
+    potentialSaving,
+    tools: budget.allocations.length,
+    overlaps,
+    unused,
+    findings: actionable.slice(0, 3)
+  };
+}
+
+/**
+ * CLI / offline judge demo (auto-approves for scripted console use only).
  */
 export async function runJudgeDemo() {
-  console.log('🎭 SubsNotes v1 MVP - Judge Mode Demo\n');
-  console.log('=' .repeat(60));
-  console.log('\n📊 Step 1: Initialize Budget\n');
+  console.log('SubsNotes v1 MVP - Judge Mode Demo\n');
 
   const data = createJudgeData();
-  console.log(`Monthly Budget: $${data.budget.monthlyLimit.toFixed(2)}`);
-  console.log(`Active Subscriptions: ${data.subscriptions.length}`);
-
-  console.log('\n' + '=' .repeat(60));
-  console.log('\n🤖 Step 2: AI Recommendations\n');
-
   const recommendations = generateJudgeRecommendations(data.subscriptions, data.budget);
-  
-  recommendations.forEach((rec, i) => {
-    console.log(`${i + 1}. ${rec.subscription.merchant}`);
-    console.log(`   Recommendation: ${rec.recommendation.type.toUpperCase()}`);
-    console.log(`   Confidence: ${(rec.recommendation.confidence * 100).toFixed(0)}%`);
-    console.log(`   Reasons:`);
-    rec.recommendation.reasons.forEach(reason => {
-      console.log(`   - ${reason}`);
-    });
-    console.log('');
-  });
-
-  console.log('=' .repeat(60));
-  console.log('\n✅ Step 3: User Approves Action\n');
-
-  // Create a mandate for the top recommendation (should be trial expiring)
   const topRec = recommendations[0];
   const futureDate = new Date();
   futureDate.setDate(futureDate.getDate() + 7);
@@ -143,19 +177,7 @@ export async function runJudgeDemo() {
     expiresAt: futureDate.toISOString()
   });
 
-  console.log(`Mandate Created: ${mandate.id}`);
-  console.log(`Merchant: ${mandate.merchant}`);
-  console.log(`Action: ${mandate.action}`);
-  console.log(`Expires: ${new Date(mandate.expiresAt).toLocaleString()}`);
-
-  // User approves the mandate
   const approved = data.mandateManager.approveMandate(mandate.id, 'user_signature_demo');
-  console.log(`\nMandate Approved: ${approved.approvedAt}`);
-
-  console.log('\n' + '=' .repeat(60));
-  console.log('\n🚀 Step 4: AI Agent Executes\n');
-
-  // Execute the mandate (using mock executor for offline demo)
   const executor = new MockExecutor();
   const result = await executor.execute(approved, {
     subscriptionDetails: topRec.subscription
@@ -163,37 +185,10 @@ export async function runJudgeDemo() {
 
   if (result.success) {
     data.mandateManager.executeMandate(mandate.id, result);
-    console.log(`✅ Execution Successful`);
-    console.log(`Message: ${result.message}`);
-    console.log(`Confirmation: ${result.evidence.confirmationId}`);
-    console.log(`Steps: ${result.evidence.steps.length}`);
-    console.log(`Duration: ${result.evidence.duration}ms`);
-  } else {
-    console.log(`❌ Execution Failed: ${result.message}`);
   }
-
-  console.log('\n' + '=' .repeat(60));
-  console.log('\n📋 Step 5: Audit Log\n');
 
   const auditLog = data.mandateManager.getAuditLog();
   const entries = auditLog.getAllEntries();
-
-  entries.forEach((entry, i) => {
-    console.log(`${i + 1}. ${entry.action} - ${entry.result}`);
-    console.log(`   Actor: ${entry.actor}`);
-    console.log(`   Time: ${new Date(entry.timestamp).toLocaleString()}`);
-    if (entry.metadata && Object.keys(entry.metadata).length > 0) {
-      console.log(`   Metadata: ${JSON.stringify(entry.metadata)}`);
-    }
-    console.log('');
-  });
-
-  console.log('=' .repeat(60));
-  console.log('\n🎉 Demo Complete!\n');
-  console.log('The closed loop:');
-  console.log('  Detect → Judge → Approve → Execute → Verify → Record\n');
-  console.log('All operations completed successfully in offline mode.');
-  console.log('No ANTHROPIC_API_KEY required for judge mode.\n');
 
   return {
     data,

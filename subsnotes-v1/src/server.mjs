@@ -18,15 +18,18 @@ const MIME_TYPES = {
   '.json': 'application/json',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
-  '.svg': 'image/svg+xml'
+  '.svg': 'image/svg+xml',
+  '.woff2': 'font/woff2',
+  '.woff': 'font/woff'
 };
 
 async function serve(req, res) {
-  let filePath = req.url === '/' ? '/index.html' : req.url;
-  
-  // Remove query string
-  filePath = filePath.split('?')[0];
-  
+  // Strip query/hash before routing so `/?lang=en` maps to index.html
+  let filePath = (req.url || '/').split('?')[0].split('#')[0] || '/';
+  if (filePath === '/' || filePath === '') {
+    filePath = '/index.html';
+  }
+
   // Serve from public/ or src/ based on path
   let basePath;
   if (filePath.startsWith('/src/')) {
@@ -34,7 +37,7 @@ async function serve(req, res) {
   } else {
     basePath = join(__dirname, '..', 'public');
   }
-  
+
   const fullPath = join(basePath, filePath);
   
   try {

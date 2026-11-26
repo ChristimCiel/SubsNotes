@@ -99,7 +99,6 @@ test.describe('Fictional Merchant Cancellation', () => {
   test('judge mode page loads and runs demo', async ({ page }) => {
     await page.goto('http://localhost:4199/judge.html');
 
-    // Module init removes the loading spinner after ~1s
     const content = page.locator('#content');
     await expect(content).toBeVisible({ timeout: 10000 });
 
@@ -107,7 +106,11 @@ test.describe('Fictional Merchant Cancellation', () => {
     await expect(runBtn).toBeVisible();
     await runBtn.click();
 
-    // Demo finishes when progress hits 100% or the success button appears
+    // Demo pauses for a real human approval click
+    const approve = page.locator('[data-testid="approve-mandate"]');
+    await expect(approve).toBeVisible({ timeout: 10000 });
+    await approve.click();
+
     await expect(runBtn).toContainText(/Demo Complete|展示完成/, { timeout: 15000 });
 
     const budgetLimit = page.locator('#budgetLimit');

@@ -105,14 +105,11 @@ test.describe('T1 Supervised Mode', () => {
     // Now at step 3
     await expect(page.locator('#step3')).toBeVisible();
 
-    // Click show hint
-    page.on('dialog', async dialog => {
-      expect(dialog.message()).toContain('Hint');
-      expect(dialog.message()).toContain('Need to cancel your subscription');
-      await dialog.accept();
-    });
-
     await page.locator('#step3 button:has-text("Show Me Where")').click();
+    const hint = page.locator('[data-testid="hint-callout"]');
+    await expect(hint).toBeVisible();
+    await expect(hint).toContainText('Hint');
+    await expect(hint).toContainText('Need to cancel your subscription');
   });
 
   test('prevents accepting offer without re-approval', async ({ page }) => {
@@ -128,18 +125,10 @@ test.describe('T1 Supervised Mode', () => {
     // Now at step 4 - try to accept offer
     await expect(page.locator('#step4')).toBeVisible();
 
-    page.on('dialog', async dialog => {
-      if (dialog.type() === 'confirm') {
-        // First confirm dialog
-        await dialog.accept();
-      } else if (dialog.type() === 'alert') {
-        // Should warn about mandate scope
-        expect(dialog.message()).toContain('Mandate scope changed');
-        await dialog.accept();
-      }
-    });
-
     await page.locator('button:has-text("Accept the Offer")').click();
+    const rescope = page.locator('[data-testid="rescope-callout"]');
+    await expect(rescope).toBeVisible();
+    await expect(rescope).toContainText('Mandate scope changed');
   });
 
   test('tracks progress correctly', async ({ page }) => {
