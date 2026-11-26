@@ -4,17 +4,56 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SubsNotes — Judge Mode</title>
-  <link rel="stylesheet" href="./suite.css">
+  <link rel="stylesheet" href="./subsnotes.css">
+  <style>
+    .sx-shell .sx-main, .sn-secondary .sn-page { max-width: 720px; margin: 0 auto; padding: 24px 20px 64px; }
+    .sx-eyebrow { font-size: 13px; color: var(--sn-ink-3); margin: 0 0 8px; }
+    .sx-h1 { font-size: 32px; letter-spacing: -0.02em; margin: 0 0 8px; }
+    .sx-sub { color: var(--sn-ink-2); margin: 0 0 12px; }
+    .sx-chip { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--sn-sunken); color: var(--sn-ink-2); }
+    .sx-stepper { display: flex; gap: 12px; list-style: none; padding: 0; margin: 24px 0; flex-wrap: wrap; font-size: 13px; color: var(--sn-ink-3); }
+    .sx-stepper .is-done, .sx-stepper .is-active { color: var(--sn-ink); font-weight: 600; }
+    .sx-stepper .is-active { color: var(--sn-forest); }
+    .sx-card, .recommendation-card, .mandate-box, .execution-box { background: var(--sn-surface); border: 1px solid var(--sn-hairline); border-radius: 16px; box-shadow: var(--sn-shadow); padding: 20px; margin-bottom: 12px; }
+    .sx-row { display: flex; flex-wrap: wrap; gap: 16px; }
+    .sx-stat__label { display: block; font-size: 12px; color: var(--sn-ink-3); }
+    .sx-stat__value { font-family: var(--sx-mono); font-size: 20px; font-variant-numeric: tabular-nums; }
+    .sx-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 10px 18px; border-radius: 12px; border: 0; font-weight: 600; cursor: pointer; }
+    .sx-btn--primary { background: var(--sn-forest); color: #fff; }
+    .sx-btn--ghost { background: none; color: var(--sn-ink-2); }
+    .sx-muted { color: var(--sn-ink-2); font-size: 14px; }
+    .sx-approval { border: 1px solid var(--sn-mint-line); background: var(--sn-mint); border-radius: 16px; padding: 20px; margin: 16px 0; }
+    .sx-approval__kicker { font-size: 12px; color: var(--sn-forest); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+    .sx-approval__facts { display: grid; grid-template-columns: 140px 1fr; gap: 8px 16px; margin: 12px 0; font-size: 14px; }
+    .sx-approval__facts dt { color: var(--sn-ink-2); }
+    .sx-approval__facts dd { margin: 0; }
+    .sx-approval__footer { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+    .sx-approval__reassure { font-size: 13px; color: var(--sn-ink-2); }
+    .sx-status--caution { background: var(--sn-trim-bg); color: var(--sn-trim-ink); border-radius: 999px; padding: 2px 8px; font-size: 12px; }
+    .audit-entry { padding: 10px 0; border-bottom: 1px solid var(--sn-hairline); font-size: 14px; }
+    .progress-bar { height: 8px; background: var(--sn-sunken); border-radius: 999px; overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--sn-forest); }
+    .progress-text { font-size: 13px; color: var(--sn-ink-2); margin-top: 6px; }
+    .sn-back { display: inline-block; margin: 16px 20px 0; color: var(--sn-ink-2); text-decoration: none; font-size: 14px; }
+    .sn-back:hover { color: var(--sn-ink); }
+  </style>
 </head>
-<body class="sx-shell">
-  <div id="shell-nav"></div>
+<body class="sn-secondary">
+  <a class="sn-back" href="index.html" data-i18n="judge.back">← Back to SubsNotes</a>
+  <header class="sn-bar">
+    <a class="sn-brand" href="index.html"><i aria-hidden="true"></i>SubsNotes</a>
+    <nav class="sn-bar__r">
+      <span class="sn-ghost sn-ghost--pill" data-i18n="nav.judge">Judge Mode</span>
+      <button type="button" class="sn-ghost" id="langBtn" data-testid="language-toggle" data-i18n="nav.lang">中文</button>
+    </nav>
+  </header>
 
-  <main class="sx-main">
+  <main class="sn-page">
     <div id="content">
       <p class="sx-eyebrow" data-i18n="nav.judge">Judge Mode</p>
-      <h1 class="sx-h1" style="font-size: var(--sx-text-2xl)">SubsNotes closed loop</h1>
+      <h1 class="sx-h1">SubsNotes closed loop</h1>
       <p class="sx-sub" data-i18n="judge.purpose">One-click offline demo of the closed loop. Pauses for your approval at step 3.</p>
-      <span class="sx-chip" data-i18n="chip.sample">Sample data · fictional</span>
+      <span class="sx-chip" data-i18n="chip.sample">Sample data</span>
 
       <ol class="sx-stepper" id="judgeStepper" style="margin-top: var(--sx-6)">
         <li class="is-todo" data-i18n="step.detect">Detect</li>
@@ -48,18 +87,17 @@
     </div>
   </main>
 
-  <div id="shell-footer"></div>
-
   <script type="module">
     import { createJudgeData, generateJudgeRecommendations } from '/src/judge-mode.mjs';
     import { getBudgetSummary } from '/src/budget.mjs';
     import { MockExecutor } from '/src/mock-executor.mjs';
-    import { navHtml, footerHtml, wireShell } from './shell.mjs';
-    import { applyI18n, t } from './i18n.mjs';
+    import { applyI18n, detectLang, toggleLang, t } from './i18n.mjs';
 
-    document.getElementById('shell-nav').innerHTML = navHtml({ active: 'overview', judgeActive: true });
-    document.getElementById('shell-footer').innerHTML = footerHtml();
-    const shell = wireShell({ page: 'judge' });
+    let lang = applyI18n(document, detectLang());
+    document.getElementById('langBtn')?.addEventListener('click', () => {
+      lang = toggleLang(document);
+    });
+    const shell = { getLang: () => (document.documentElement.lang === 'zh-TW' ? 'zh-TW' : 'en') };
 
     let demoData = null;
     let pendingMandate = null;

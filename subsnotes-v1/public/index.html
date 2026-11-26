@@ -3,371 +3,558 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SubsNotes — Keep the AI tools you use</title>
-  <link rel="stylesheet" href="./suite.css">
+  <title>SubsNotes — One decision at a time</title>
+  <link rel="stylesheet" href="./subsnotes.css">
 </head>
-<body class="sx-shell">
-  <div id="shell-nav"></div>
+<body class="sn">
+  <a class="sn-skip" href="#decision" data-i18n="v2.skip">Skip to decision</a>
+  <header class="sn-bar">
+    <a class="sn-brand" href="/" data-testid="brand"><i aria-hidden="true"></i>SubsNotes</a>
+    <nav class="sn-bar__r">
+      <button type="button" class="sn-ghost" id="toolsBtn" data-testid="open-tools" data-i18n="v2.bar.tools">Your 7 tools</button>
+      <a class="sn-ghost sn-ghost--pill" href="judge.html" data-testid="judge-link" data-i18n="v2.bar.judge">Judge demo</a>
+      <button type="button" class="sn-ghost" id="langBtn" data-testid="language-toggle" data-i18n="nav.lang">中文</button>
+    </nav>
+  </header>
 
-  <main class="sx-main">
-    <section class="sx-hero" id="hero">
-      <div class="sx-hero__copy">
-        <p class="sx-eyebrow" data-i18n="hero.eyebrow">For people who pay for too many AI tools</p>
-        <h1 class="sx-h1" data-i18n="hero.h1">Keep the AI tools you use. Drop the rest.</h1>
-        <p class="sx-sub" data-i18n="hero.sub">SubsNotes finds overlapping subscriptions, explains why, and cancels only what you approve.</p>
-        <div class="sx-row">
-          <a class="sx-btn sx-btn--primary" href="#findings" data-i18n="hero.cta">Review 3 findings</a>
-          <a class="sx-btn sx-btn--ghost" href="#safety" data-i18n="hero.secondary">How it stays safe</a>
-        </div>
-        <div style="margin-top: var(--sx-4)">
-          <span class="sx-chip" data-i18n="chip.sample">Sample data · fictional</span>
-        </div>
-      </div>
-      <div class="sx-hero__artifact">
-        <div class="sx-card" id="snapshot">
-          <div class="sx-stat">
-            <span class="sx-stat__label"><span data-i18n="snapshot.month">This month</span></span>
-            <span class="sx-stat__value sx-num">US$ <span id="snapSpent">0.00</span> <span data-i18n="snapshot.of">of</span> US$ <span id="snapEnvelope">0.00</span> <span data-i18n="snapshot.envelope">envelope</span></span>
-          </div>
-          <div class="sx-util-bar" style="margin: var(--sx-3) 0" aria-hidden="true"><span id="snapBar" style="width:0%"></span></div>
-          <p class="sx-muted" style="margin:0">
-            <span class="sx-num" id="snapReview">0</span> <span data-i18n="snapshot.review">to review</span>
-            · <span data-i18n="snapshot.saving">potential saving</span> US$ <span class="sx-num" id="snapSaving">0.00</span>/mo
-          </p>
-          <p class="sx-muted" style="margin: var(--sx-2) 0 0">
-            <span class="sx-num" id="snapTools">0</span> <span data-i18n="snapshot.tools">tools</span>
-            · <span class="sx-num" id="snapOverlaps">0</span> <span data-i18n="snapshot.overlaps">overlaps</span>
-            · <span class="sx-num" id="snapUnused">0</span> <span data-i18n="snapshot.unused">unused</span>
-          </p>
-        </div>
-      </div>
+  <main class="sn-main">
+    <p class="sn-label">
+      <span data-i18n="v2.hero.label">Your AI tools this month</span>
+      <span class="sn-chip" data-i18n="v2.chip.sample">Sample data</span>
+    </p>
+
+    <section class="sn-hero">
+      <h1 class="sn-total num" data-testid="monthly-total">US$<span id="total">128</span><small data-i18n="v2.unit.mo">/mo</small></h1>
+      <p class="sn-hook" id="hook" data-testid="hook"></p>
+      <p class="sn-saved num" id="saved" data-testid="saved-so-far" aria-live="polite" hidden></p>
     </section>
 
-    <ol class="sx-stepper" id="loopStepper" aria-label="Closed loop" aria-live="polite">
-      <li class="is-done" data-i18n="step.detect">Detect</li>
-      <li class="is-done" data-i18n="step.judge">Judge</li>
-      <li class="is-active" data-i18n="step.approve">Approve</li>
-      <li class="is-todo" data-i18n="step.execute">Execute</li>
-      <li class="is-todo" data-i18n="step.verify">Verify</li>
-    </ol>
+    <div class="sn-strip" id="strip" role="img" aria-label="Monthly spend by tool"></div>
+    <div class="sn-strip__legend">
+      <span data-i18n="v2.strip.keep">Grey: you use it</span>
+      <span data-i18n="v2.strip.trim">Striped: overlap or unused</span>
+    </div>
 
-    <section class="sx-section" id="findings">
-      <h2 class="sx-eyebrow" style="font-size: var(--sx-text-sm); text-transform: none; letter-spacing: 0;" data-i18n="findings.title">Findings</h2>
-      <div id="findingsQueue"></div>
-      <div id="approvalHost"></div>
-      <div id="receiptHost" class="hidden"></div>
-      <div id="doneHost" class="hidden sx-card" style="margin-top: var(--sx-4)">
-        <p data-i18n="findings.done">You're within your envelope this month.</p>
-        <div class="sx-row">
-          <a class="sx-btn sx-btn--primary" href="supervised.html" data-i18n="findings.guided">Try a guided cancel yourself</a>
-          <button type="button" class="sx-btn sx-btn--ghost" id="viewAuditBtn" data-i18n="findings.audit">View audit log</button>
-        </div>
-        <details class="sx-disclosure" id="auditDisclosure" style="margin-top: var(--sx-4)">
-          <summary data-i18n="findings.audit">View audit log</summary>
-          <div id="auditLog"></div>
-        </details>
+    <article class="sn-card" id="decision" data-testid="decision-card" data-state="ask" aria-live="polite" tabindex="-1"></article>
+    <p class="sn-tools-mobile">
+      <button type="button" class="sn-ghost" id="toolsBtnMobile" data-i18n="v2.bar.toolsMobile">See all 7 tools</button>
+    </p>
+
+    <section class="sn-how" aria-label="How it works">
+      <div>
+        <b data-i18n="v2.how.1t">Finds the overlap</b>
+        <p data-i18n="v2.how.1d">Reads your receipts on your device and spots tools that do the same job.</p>
+      </div>
+      <div>
+        <b data-i18n="v2.how.2t">Asks first</b>
+        <p data-i18n="v2.how.2d">Nothing is cancelled or changed until you tap approve.</p>
+      </div>
+      <div>
+        <b data-i18n="v2.how.3t">Shows proof</b>
+        <p data-i18n="v2.how.3d">Every change comes back with a confirmation number.</p>
       </div>
     </section>
 
-    <section class="sx-section" id="budget">
-      <div class="sx-card">
-        <div class="sx-row" style="justify-content: space-between">
-          <strong data-i18n="budget.title">Budget envelope</strong>
-          <span class="sx-chip" data-i18n="budget.note">No money is held</span>
-        </div>
-        <div class="sx-row" style="margin-top: var(--sx-3)">
-          <button type="button" class="sx-btn sx-btn--secondary sx-btn--compact" id="budgetMinus" aria-label="Decrease envelope">−</button>
-          <span class="sx-num" style="font-size: var(--sx-text-xl)">US$ <span id="budgetValue">100</span></span>
-          <button type="button" class="sx-btn sx-btn--secondary sx-btn--compact" id="budgetPlus" aria-label="Increase envelope">+</button>
-        </div>
-        <div class="sx-util-bar" style="margin-top: var(--sx-3)"><span id="budgetBar" style="width:0%"></span></div>
-        <details class="sx-disclosure" style="margin-top: var(--sx-4); border-top: 0; padding-top: 0">
-          <summary data-i18n="budget.note">No money is held</summary>
-          <p data-i18n="budget.held">Licensed-partner wallets come later. This envelope only tracks capacity.</p>
-        </details>
-      </div>
-    </section>
-
-    <section class="sx-section" id="safety">
-      <h2 class="sx-eyebrow" style="font-size: var(--sx-text-sm); text-transform: none; letter-spacing: 0;" data-i18n="safety.title">How it stays safe</h2>
-      <div class="sx-grid-2" style="margin-top: var(--sx-3)">
-        <div class="sx-safety-item"><strong data-i18n="safety.1t"></strong><p data-i18n="safety.1d"></p></div>
-        <div class="sx-safety-item"><strong data-i18n="safety.2t"></strong><p data-i18n="safety.2d"></p></div>
-        <div class="sx-safety-item"><strong data-i18n="safety.3t"></strong><p data-i18n="safety.3d"></p></div>
-        <div class="sx-safety-item"><strong data-i18n="safety.4t"></strong><p data-i18n="safety.4d"></p></div>
-      </div>
-      <details class="sx-disclosure" style="margin-top: var(--sx-4)">
-        <summary data-i18n="safety.tiers">Execution tiers (T0 / T1 / T2)</summary>
-        <p>T0 deep links (Apple, Google Play, LINE Pay, 全支付, 街口). T1 supervised step-by-step. T2 autonomous Playwright within a mandate — demoed only on the fictional merchant.</p>
-      </details>
-      <details class="sx-disclosure">
-        <summary data-i18n="safety.limits">Known limits</summary>
-        <p>Apple / Google Play subscriptions stay deep-link only. No real money, real accounts, or live merchant cancellations in this MVP.</p>
-      </details>
-    </section>
-
-    <section class="sx-section">
-      <p class="sx-muted" data-i18n="close.price">US$30/month when available. Today everything here is a fictional sample.</p>
-      <a class="sx-btn sx-btn--ghost" href="supervised.html" data-i18n="findings.guided">Try a guided cancel yourself</a>
-    </section>
+    <p class="sn-fine">
+      <span data-i18n="v2.fine.price">US$30/month when it launches.</span>
+      ·
+      <button type="button" data-testid="open-safety" data-i18n="v2.fine.safety">Privacy &amp; safety details</button>
+      ·
+      <a href="https://fetscape.tagstory.co/" data-testid="sibling-link" data-i18n="v2.fine.sibling">Also from TAG Story Labs: Fetscape</a>
+    </p>
   </main>
 
-  <div id="shell-footer"></div>
+  <div class="sn-scrim" id="scrim" hidden></div>
+  <aside class="sn-sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden></aside>
+  <div class="sn-toast" id="toast" role="status" aria-live="polite"></div>
 
   <script type="module">
-    import { createJudgeData, generateJudgeRecommendations, getStackSnapshot } from '/src/judge-mode.mjs';
+    import {
+      createJudgeData,
+      generateJudgeRecommendations,
+      getDecisionQueue,
+      targetPlanName
+    } from '/src/judge-mode.mjs';
     import { MockExecutor } from '/src/mock-executor.mjs';
-    import { navHtml, footerHtml, wireShell, showToast } from './shell.mjs';
-    import { applyI18n, t } from './i18n.mjs';
-
-    document.getElementById('shell-nav').innerHTML = navHtml({ active: 'overview' });
-    document.getElementById('shell-footer').innerHTML = footerHtml();
-    const shell = wireShell({ page: 'overview' });
+    import { detectLang, setLang, t, applyI18n } from './i18n.mjs';
 
     const demo = createJudgeData();
     let recommendations = generateJudgeRecommendations(demo.subscriptions, demo.budget);
-    let snapshot = getStackSnapshot(demo.budget, recommendations);
-    let focusIndex = 0;
-    let completed = [];
+    let queue = getDecisionQueue(demo.budget, recommendations);
 
-    function money(n) { return Number(n).toFixed(2); }
+    let lang = applyI18n(document, detectLang());
+    let index = 0;
+    let savedTotal = 0;
+    let state = 'ask';
+    let lastConfirmation = '';
+    let sheetOpener = null;
+    let reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    function refreshSnapshot() {
-      snapshot = getStackSnapshot(demo.budget, recommendations);
-      document.getElementById('snapSpent').textContent = money(snapshot.spent);
-      document.getElementById('snapEnvelope').textContent = money(snapshot.envelope);
-      document.getElementById('snapReview').textContent = String(Math.max(0, snapshot.reviewCount - completed.length));
-      document.getElementById('snapSaving').textContent = money(snapshot.potentialSaving);
-      document.getElementById('snapTools').textContent = String(snapshot.tools);
-      document.getElementById('snapOverlaps').textContent = String(snapshot.overlaps);
-      document.getElementById('snapUnused').textContent = String(snapshot.unused);
-      const pct = Math.min(100, (snapshot.spent / snapshot.envelope) * 100);
-      document.getElementById('snapBar').style.width = pct + '%';
-      document.getElementById('budgetValue').textContent = String(Math.round(demo.budget.monthlyLimit));
-      document.getElementById('budgetBar').style.width = pct + '%';
+    const $ = (sel) => document.querySelector(sel);
+
+    function money(n) {
+      return Math.round(Number(n));
     }
 
-    function setStepper(phase) {
-      const nodes = [...document.querySelectorAll('#loopStepper li')];
-      const order = ['detect', 'judge', 'approve', 'execute', 'verify'];
-      const idx = order.indexOf(phase);
-      nodes.forEach((n, i) => {
-        n.classList.remove('is-done', 'is-active', 'is-todo');
-        if (i < idx) n.classList.add('is-done');
-        else if (i === idx) n.classList.add('is-active');
-        else n.classList.add('is-todo');
+    function resolveFinding(item) {
+      const rec = item.rec;
+      let saving = item.saving;
+      let kind = rec.recommendation.type;
+      let plan = targetPlanName(rec);
+      if (kind === 'downgrade' && saving == null) {
+        kind = 'cancel';
+        plan = null;
+        saving = rec.subscription.cadence === 'annual'
+          ? rec.subscription.amount / 12
+          : rec.subscription.amount;
+      }
+      return { rec, saving: saving || 0, kind, plan };
+    }
+
+    function remainingWaste() {
+      const start = state === 'done' ? index + 1 : index;
+      return queue.findings.slice(start).reduce((s, f) => {
+        const r = resolveFinding(f);
+        return s + r.saving;
+      }, 0);
+    }
+
+    function currentSpend() {
+      return money(queue.total - savedTotal);
+    }
+
+    function tween(el, to) {
+      const from = Number(el.textContent) || 0;
+      if (reducedMotion || from === to) {
+        el.textContent = String(to);
+        return;
+      }
+      const t0 = performance.now();
+      const dur = 420;
+      (function frame(now) {
+        const p = Math.min(1, (now - t0) / dur);
+        const e = 1 - Math.pow(1 - p, 3);
+        el.textContent = String(Math.round(from + (to - from) * e));
+        if (p < 1) requestAnimationFrame(frame);
+      })(t0);
+    }
+
+    function pctIncrease(sub) {
+      if (!sub.priceHistory || sub.priceHistory.length < 2) return null;
+      const a = sub.priceHistory[sub.priceHistory.length - 2].amount;
+      const b = sub.priceHistory[sub.priceHistory.length - 1].amount;
+      return Math.round(((b - a) / a) * 100);
+    }
+
+    function otherMerchant(rec) {
+      const reason = (rec.recommendation.reasons || []).find((r) => r.startsWith('Similar services:'));
+      if (!reason) return '';
+      return reason.replace('Similar services: ', '').split(',')[0].trim();
+    }
+
+    function plainReason(resolved) {
+      const risks = resolved.rec.recommendation.risks || [];
+      const sub = resolved.rec.subscription;
+      const other = otherMerchant(resolved.rec);
+      const category = t(lang, `v2.category.${sub.category}`) || sub.category.toLowerCase();
+      const plan = resolved.plan || '';
+      const days = (() => {
+        const r = (resolved.rec.recommendation.reasons || []).find((x) => /Not used in (\d+)/.test(x));
+        return r ? r.match(/Not used in (\d+)/)[1] : '60';
+      })();
+      const pct = pctIncrease(sub) ?? 0;
+
+      if (risks.includes('price_increase') && risks.includes('duplicate')) {
+        return t(lang, 'v2.reason.price_dup', { pct, other, category });
+      }
+      if (risks.includes('unused') && risks.includes('duplicate')) {
+        return t(lang, 'v2.reason.unused_dup', { days, other });
+      }
+      if (risks.includes('duplicate')) {
+        return t(lang, 'v2.reason.dup', { other, category, plan });
+      }
+      if (risks.includes('unused')) {
+        return t(lang, 'v2.reason.unused', { days });
+      }
+      return (resolved.rec.recommendation.reasons || [])[0] || '';
+    }
+
+    function titleFor(resolved) {
+      if (resolved.kind === 'downgrade' && resolved.plan) {
+        return t(lang, 'v2.title.downgrade', {
+          merchant: resolved.rec.subscription.merchant,
+          plan: resolved.plan
+        });
+      }
+      return t(lang, 'v2.title.cancel', { merchant: resolved.rec.subscription.merchant });
+    }
+
+    function actionPhrase(resolved) {
+      if (resolved.kind === 'downgrade' && resolved.plan) {
+        return t(lang, 'v2.action.switch', {
+          merchant: resolved.rec.subscription.merchant,
+          plan: resolved.plan
+        });
+      }
+      return t(lang, 'v2.action.cancel', { merchant: resolved.rec.subscription.merchant });
+    }
+
+    function dotsHtml(activeIdx) {
+      return queue.findings.map((_, k) =>
+        `<i class="${k <= activeIdx ? 'is-on' : ''}" aria-hidden="true"></i>`
+      ).join('');
+    }
+
+    function updateHero() {
+      const waste = remainingWaste();
+      const hook = $('#hook');
+      if (waste <= 0 || index >= queue.findings.length) {
+        hook.textContent = t(lang, 'v2.hook.done');
+      } else {
+        hook.innerHTML = t(lang, 'v2.hook', { waste: money(waste) });
+      }
+      tween($('#total'), currentSpend());
+      const savedEl = $('#saved');
+      if (savedTotal > 0) {
+        savedEl.hidden = false;
+        savedEl.textContent = t(lang, 'v2.saved', { n: money(savedTotal) });
+        requestAnimationFrame(() => savedEl.classList.add('is-on'));
+      } else {
+        savedEl.classList.remove('is-on');
+        savedEl.hidden = true;
+      }
+    }
+
+    function buildStrip() {
+      const strip = $('#strip');
+      if (!strip.children.length) {
+        strip.innerHTML = demo.subscriptions.map((sub) => {
+          const amt = sub.cadence === 'annual' ? sub.amount / 12 : sub.amount;
+          return `<div class="sn-seg" data-merchant="${sub.merchant}" style="flex-grow:${amt}" title="${sub.merchant} · US$${amt}/mo"></div>`;
+        }).join('');
+      }
+      [...strip.children].forEach((el) => {
+        const merchant = el.dataset.merchant;
+        const sub = demo.subscriptions.find((s) => s.merchant === merchant);
+        const amt = sub.cadence === 'annual' ? sub.amount / 12 : sub.amount;
+        const fIdx = queue.findings.findIndex((f) => f.rec.subscription.merchant === merchant);
+        el.className = 'sn-seg';
+        el.style.flexGrow = String(amt);
+        if (fIdx >= 0 && fIdx < index) {
+          const resolved = resolveFinding(queue.findings[fIdx]);
+          const next = Math.max(0, amt - resolved.saving);
+          el.style.flexGrow = String(next);
+          if (next <= 0) el.classList.add('is-gone');
+        } else if (fIdx >= 0 && fIdx >= index && state !== 'all-done') {
+          el.classList.add('is-trim');
+          if (fIdx === index && state !== 'all-done') el.classList.add('is-focus');
+        }
       });
     }
 
-    function findingTitle(rec, lang) {
-      const type = rec.recommendation.type;
-      const merchant = rec.subscription.merchant;
-      if (type === 'cancel' && (rec.recommendation.risks || []).includes('duplicate')) {
-        const other = (rec.recommendation.reasons.find((r) => r.startsWith('Similar')) || '').replace('Similar services: ', '');
-        return lang === 'zh-TW'
-          ? `取消 ${merchant} — 與 ${other || '同類工具'} 重疊`
-          : `Cancel ${merchant} — overlaps with ${other || 'another tool'}`;
-      }
-      if (type === 'cancel') return lang === 'zh-TW' ? `取消 ${merchant}` : `Cancel ${merchant}`;
-      if (type === 'downgrade') return lang === 'zh-TW' ? `降級 ${merchant}` : `Downgrade ${merchant}`;
-      return merchant;
+    function showToast(message) {
+      const el = $('#toast');
+      el.textContent = message;
+      el.classList.add('is-visible');
+      clearTimeout(el._timer);
+      el._timer = setTimeout(() => el.classList.remove('is-visible'), 4000);
     }
 
-    function renderFindings() {
-      const lang = shell.getLang();
-      const queue = snapshot.findings.filter((_, i) => !completed.includes(i));
-      const host = document.getElementById('findingsQueue');
-      if (!queue.length) {
-        host.innerHTML = '';
-        document.getElementById('doneHost').classList.remove('hidden');
-        setStepper('verify');
-        return;
-      }
-      document.getElementById('doneHost').classList.add('hidden');
-      const focus = queue[0];
-      const focusGlobal = snapshot.findings.indexOf(focus);
-      focusIndex = focusGlobal;
+    function renderAsk() {
+      const item = queue.findings[index];
+      const resolved = resolveFinding(item);
+      const card = $('#decision');
+      card.dataset.state = 'ask';
+      card.innerHTML = `
+        <div class="sn-card__kick">
+          <span>${t(lang, 'v2.card.of', { i: index + 1, n: queue.findings.length })}</span>
+          <span class="sn-dots">${dotsHtml(index)}</span>
+        </div>
+        <h2 class="sn-card__title">${titleFor(resolved)}</h2>
+        <p class="sn-card__reason">${plainReason(resolved)}</p>
+        <div class="sn-cta">
+          <button type="button" class="sn-btn sn-btn--primary" data-testid="approve-finding">${t(lang, 'v2.card.approve', { n: money(resolved.saving) })}</button>
+          <button type="button" class="sn-btn sn-btn--quiet" data-testid="keep-finding">${t(lang, 'v2.card.keep')}</button>
+        </div>
+        <details>
+          <summary>${t(lang, 'v2.card.why')}</summary>
+          <ul>${(resolved.rec.recommendation.reasons || []).map((r) => `<li>${r}</li>`).join('')}</ul>
+          <p class="sn-will"></p>
+        </details>`;
+      const m = resolved.rec.subscription.merchant;
+      const willAction = resolved.kind === 'downgrade' && resolved.plan
+        ? (lang === 'zh-TW' ? `把 ${m} 降級為 ${resolved.plan}` : `switch ${m} to ${resolved.plan}`)
+        : (lang === 'zh-TW' ? `取消 ${m}` : `cancel ${m}`);
+      card.querySelector('.sn-will').textContent = lang === 'zh-TW'
+        ? `SubsNotes 只會替你${willAction}，不做其他事。這次授權 7 天後失效。`
+        : `SubsNotes will ${willAction} for you — nothing else. The permission expires in 7 days.`;
 
-      const rest = queue.slice(1).map((rec) => {
-        const i = snapshot.findings.indexOf(rec);
-        return `<div class="sx-finding-row" data-idx="${i}">
-          <span>${findingTitle(rec, lang)}</span>
-          <span class="sx-muted">US$ <span class="sx-num">${money(rec.subscription.amount)}</span>/mo</span>
-        </div>`;
-      }).join('');
-
-      const conf = focus.recommendation.confidence >= 0.85
-        ? t(lang, 'findings.confidenceHigh')
-        : t(lang, 'findings.confidenceMed');
-      const approveLabel = focus.recommendation.type === 'downgrade'
-        ? t(lang, 'findings.approveDowngrade')
-        : t(lang, 'findings.approveCancel');
-
-      host.innerHTML = `
-        <article class="sx-card sx-card--focus" id="focusFinding">
-          <div class="sx-row" style="justify-content: space-between; align-items: flex-start">
-            <div>
-              <h3 style="margin:0 0 var(--sx-2); font-size: var(--sx-text-lg)">${findingTitle(focus, lang)}</h3>
-              <p class="sx-muted" style="margin:0">
-                <span data-i18n="findings.saves">${t(lang, 'findings.saves')}</span>
-                US$ <span class="sx-num">${money(focus.subscription.amount)}</span>/mo
-                · ${conf}
-              </p>
-            </div>
-            <span class="sx-status sx-status--caution">${focus.recommendation.type}</span>
-          </div>
-          <div class="sx-row" style="margin-top: var(--sx-4)">
-            <button type="button" class="sx-btn sx-btn--primary" id="approveFinding">${approveLabel}</button>
-            <button type="button" class="sx-btn sx-btn--ghost" id="keepFinding" data-i18n="findings.keep">${t(lang, 'findings.keep')}</button>
-            <button type="button" class="sx-btn sx-btn--ghost" id="snoozeFinding" data-i18n="findings.snooze">${t(lang, 'findings.snooze')}</button>
-          </div>
-          <details class="sx-disclosure" style="margin-top: var(--sx-4)">
-            <summary data-i18n="findings.why">${t(lang, 'findings.why')}</summary>
-            <ul>${focus.recommendation.reasons.map((r) => `<li>${r}</li>`).join('')}</ul>
-          </details>
-        </article>
-        ${rest}`;
-
-      document.getElementById('approveFinding').onclick = () => openApproval(focus, focusGlobal);
-      document.getElementById('keepFinding').onclick = () => {
-        completed.push(focusGlobal);
-        showToast(t(lang, 'toast.kept'));
-        document.getElementById('approvalHost').innerHTML = '';
-        renderFindings();
-        refreshSnapshot();
-      };
-      document.getElementById('snoozeFinding').onclick = () => {
-        completed.push(focusGlobal);
-        showToast(t(lang, 'toast.snoozed'));
-        document.getElementById('approvalHost').innerHTML = '';
-        renderFindings();
-        refreshSnapshot();
-      };
-      setStepper('approve');
+      card.querySelector('[data-testid="approve-finding"]').onclick = () => approveFinding(resolved);
+      card.querySelector('[data-testid="keep-finding"]').onclick = () => keepFinding(resolved);
     }
 
-    function openApproval(rec, idx) {
-      const lang = shell.getLang();
+    async function approveFinding(resolved) {
       const future = new Date();
       future.setDate(future.getDate() + 7);
       const mandate = demo.mandateManager.createMandate({
-        merchant: rec.subscription.merchant,
-        action: rec.recommendation.type === 'downgrade' ? 'downgrade' : 'cancel',
+        merchant: resolved.rec.subscription.merchant,
+        action: resolved.kind === 'downgrade' ? 'downgrade' : 'cancel',
         scope: 'single',
-        maxAmount: rec.subscription.amount,
+        maxAmount: resolved.rec.subscription.amount,
         expiresAt: future.toISOString()
       });
+      const approved = demo.mandateManager.approveMandate(mandate.id, 'user_click');
 
-      const host = document.getElementById('approvalHost');
-      host.innerHTML = `
-        <section class="sx-approval" role="region" aria-labelledby="approvalTitle" tabindex="-1">
-          <div class="sx-approval__header">
-            <span class="sx-approval__kicker" data-i18n="approval.kicker">${t(lang, 'approval.kicker')}</span>
-            <h3 class="sx-approval__title" id="approvalTitle">${findingTitle(rec, lang)}</h3>
-          </div>
-          <dl class="sx-approval__facts">
-            <dt data-i18n="approval.what">${t(lang, 'approval.what')}</dt>
-            <dd>${mandate.action} ${mandate.merchant}</dd>
-            <dt data-i18n="approval.scope">${t(lang, 'approval.scope')}</dt>
-            <dd>${mandate.scope}</dd>
-            <dt data-i18n="approval.limit">${t(lang, 'approval.limit')}</dt>
-            <dd class="sx-num">US$ ${money(mandate.maxAmount)}</dd>
-            <dt data-i18n="approval.expires">${t(lang, 'approval.expires')}</dt>
-            <dd class="sx-num">${new Date(mandate.expiresAt).toLocaleString()}</dd>
-            <dt data-i18n="approval.executedBy">${t(lang, 'approval.executedBy')}</dt>
-            <dd>MockExecutor · offline replay</dd>
-          </dl>
-          <div class="sx-approval__footer">
-            <button type="button" class="sx-btn sx-btn--primary" id="approveRun" data-i18n="approval.approveRun">${t(lang, 'approval.approveRun')}</button>
-            <button type="button" class="sx-btn sx-btn--ghost" id="notNow" data-i18n="approval.notNow">${t(lang, 'approval.notNow')}</button>
-          </div>
-          <p class="sx-approval__reassure" data-i18n="approval.reassure">${t(lang, 'approval.reassure')}</p>
-          <details class="sx-disclosure">
-            <summary data-i18n="approval.tech">${t(lang, 'approval.tech')}</summary>
-            <p class="sx-mono">mandate id: ${mandate.id}</p>
-          </details>
-        </section>`;
+      state = 'working';
+      renderWorking(resolved);
 
-      const region = host.querySelector('.sx-approval');
-      region.focus();
-      region.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-
-      document.getElementById('notNow').onclick = () => { host.innerHTML = ''; };
-      document.getElementById('approveRun').onclick = async () => {
-        setStepper('execute');
-        const btn = document.getElementById('approveRun');
-        btn.disabled = true;
-        btn.textContent = t(lang, 'approval.executing');
-        const approved = demo.mandateManager.approveMandate(mandate.id, 'user_signature_demo');
-        const executor = new MockExecutor();
-        const result = await executor.execute(approved, { subscriptionDetails: rec.subscription });
-        if (result.success) {
-          demo.mandateManager.executeMandate(mandate.id, result);
-          setStepper('verify');
-          completed.push(idx);
-          host.innerHTML = '';
-          const receipt = document.getElementById('receiptHost');
-          receipt.classList.remove('hidden');
-          receipt.innerHTML = `
-            <div class="sx-card sx-card--focus">
-              <p style="margin:0 0 var(--sx-3)">
-                <span class="sx-status sx-status--positive" data-i18n="receipt.cancelled">${t(lang, 'receipt.cancelled')}</span>
-                · <span class="sx-num">${result.evidence.confirmationId}</span>
-                · <span data-i18n="findings.saves">${t(lang, 'findings.saves')}</span>
-                US$ <span class="sx-num">${money(rec.subscription.amount)}</span>/mo
-              </p>
-              <div class="sx-row">
-                <button type="button" class="sx-btn sx-btn--primary" id="nextFinding" data-i18n="findings.next">${t(lang, 'findings.next')}</button>
-                <button type="button" class="sx-btn sx-btn--ghost" id="receiptAudit" data-i18n="findings.audit">${t(lang, 'findings.audit')}</button>
-              </div>
-            </div>`;
-          document.getElementById('nextFinding').onclick = () => {
-            receipt.classList.add('hidden');
-            renderFindings();
-            refreshSnapshot();
-          };
-          document.getElementById('receiptAudit').onclick = () => showAudit();
-          renderAudit();
+      const stepEls = [...document.querySelectorAll('#decision .sn-run li')];
+      const tick = (k) => {
+        if (stepEls[k]) {
+          stepEls[k].classList.add('is-ok');
+          stepEls[k].querySelector('i').textContent = '✓';
         }
+      };
+      if (!reducedMotion) {
+        setTimeout(() => tick(0), 350);
+        setTimeout(() => tick(1), 800);
+        setTimeout(() => tick(2), 1250);
+      } else {
+        stepEls.forEach((_, k) => tick(k));
+      }
+
+      const executor = new MockExecutor();
+      const started = Date.now();
+      const result = await executor.execute(approved, {
+        subscriptionDetails: resolved.rec.subscription
+      });
+      const wait = Math.max(0, 1400 - (Date.now() - started));
+      if (wait && !reducedMotion) await new Promise((r) => setTimeout(r, wait));
+      else if (reducedMotion) await new Promise((r) => setTimeout(r, 0));
+
+      if (result.success) {
+        demo.mandateManager.executeMandate(mandate.id, result);
+        lastConfirmation = result.evidence?.confirmationId || '';
+        savedTotal += resolved.saving;
+        state = 'done';
+        render();
+      }
+    }
+
+    function keepFinding(resolved) {
+      demo.mandateManager.getAuditLog().logEntry({
+        mandateId: `kept_${resolved.rec.subscription.merchant.replace(/\s+/g, '_')}`,
+        action: 'kept',
+        result: 'success',
+        actor: 'user',
+        metadata: { merchant: resolved.rec.subscription.merchant }
+      });
+      showToast(t(lang, 'v2.toast.kept', { merchant: resolved.rec.subscription.merchant }));
+      index += 1;
+      state = index >= queue.findings.length ? 'all-done' : 'ask';
+      render();
+    }
+
+    function renderWorking(resolved) {
+      const card = $('#decision');
+      card.dataset.state = 'working';
+      card.innerHTML = `
+        <div class="sn-card__kick">
+          <span>${t(lang, 'v2.run.title')}</span>
+          <span class="sn-dots">${dotsHtml(index)}</span>
+        </div>
+        <h2 class="sn-card__title">${titleFor(resolved)}</h2>
+        <ol class="sn-run" aria-live="polite">
+          <li><i></i>${t(lang, 'v2.run.1')}</li>
+          <li><i></i>${t(lang, 'v2.run.2')}</li>
+          <li><i></i>${t(lang, 'v2.run.3')}</li>
+        </ol>`;
+      updateHero();
+      buildStrip();
+    }
+
+    function renderDone() {
+      const resolved = resolveFinding(queue.findings[index]);
+      const card = $('#decision');
+      card.dataset.state = 'done';
+      card.innerHTML = `
+        <div class="sn-card__kick">
+          <span>${t(lang, 'v2.done.kicker')}</span>
+          <span class="sn-dots">${dotsHtml(index)}</span>
+        </div>
+        <h2 class="sn-card__title">${titleFor(resolved)}</h2>
+        <div class="sn-receipt">
+          <span class="sn-receipt__amt num">+US$${money(resolved.saving)}<span>${t(lang, 'v2.done.saved')}</span></span>
+          <span class="sn-mono">${lastConfirmation}</span>
+        </div>
+        <div class="sn-cta" style="margin-top:18px">
+          <button type="button" class="sn-btn sn-btn--primary" id="nextFinding">${t(lang, 'v2.done.next')}</button>
+        </div>`;
+      const next = card.querySelector('#nextFinding');
+      next.focus();
+      next.onclick = () => {
+        index += 1;
+        state = index >= queue.findings.length ? 'all-done' : 'ask';
+        render();
       };
     }
 
-    function renderAudit() {
-      const entries = demo.mandateManager.getAuditLog().getAllEntries();
-      document.getElementById('auditLog').innerHTML = entries.map((e, i) =>
-        `<div class="audit-entry"><strong>${i + 1}. ${e.action} — ${e.result}</strong><div>${e.actor}</div><div class="sx-num">${new Date(e.timestamp).toLocaleString()}</div></div>`
-      ).join('') || '<p class="sx-muted">—</p>';
+    function renderAllDone() {
+      const card = $('#decision');
+      card.dataset.state = 'all-done';
+      card.innerHTML = `
+        <h2 class="sn-card__title">${t(lang, 'v2.all.title')}</h2>
+        <p class="sn-card__reason">${t(lang, 'v2.all.sub', { n: currentSpend() })}</p>
+        <div class="sn-cta">
+          <button type="button" class="sn-btn sn-btn--primary" id="seeLog">${t(lang, 'v2.all.log')}</button>
+          <a class="sn-btn sn-btn--quiet" href="supervised.html">${t(lang, 'v2.all.guided')}</a>
+        </div>`;
+      card.querySelector('#seeLog').onclick = () => openSheet('log', card.querySelector('#seeLog'));
     }
 
-    function showAudit() {
-      document.getElementById('doneHost').classList.remove('hidden');
-      const d = document.getElementById('auditDisclosure');
-      d.open = true;
-      d.scrollIntoView({ behavior: 'smooth' });
-      renderAudit();
+    function render() {
+      applyI18n(document, lang);
+      updateHero();
+      buildStrip();
+      if (index >= queue.findings.length) {
+        state = 'all-done';
+        renderAllDone();
+        return;
+      }
+      if (state === 'ask') renderAsk();
+      else if (state === 'done') renderDone();
+      else if (state === 'all-done') renderAllDone();
     }
 
-    document.getElementById('viewAuditBtn')?.addEventListener('click', showAudit);
-    document.getElementById('budgetMinus').onclick = () => {
-      demo.budget.monthlyLimit = Math.max(10, demo.budget.monthlyLimit - 10);
+    function recomputeQueue() {
       recommendations = generateJudgeRecommendations(demo.subscriptions, demo.budget);
-      refreshSnapshot();
-      renderFindings();
-    };
-    document.getElementById('budgetPlus').onclick = () => {
-      demo.budget.monthlyLimit += 10;
-      recommendations = generateJudgeRecommendations(demo.subscriptions, demo.budget);
-      refreshSnapshot();
-      renderFindings();
-    };
+      queue = getDecisionQueue(demo.budget, recommendations);
+      // Keep index within bounds; preserve completed progress by merchant when possible
+      if (index > queue.findings.length) index = queue.findings.length;
+      $('#strip').innerHTML = '';
+      buildStrip();
+    }
 
-    document.addEventListener('sx:lang', () => {
-      applyI18n(document);
-      renderFindings();
+    function openSheet(kind, opener) {
+      sheetOpener = opener || document.activeElement;
+      const sheet = $('#sheet');
+      const scrim = $('#scrim');
+      let body = '';
+      let title = '';
+
+      if (kind === 'tools') {
+        title = t(lang, 'v2.sheet.tools');
+        const pending = new Set(queue.findings.slice(index).map((f) => f.rec.subscription.merchant));
+        body = demo.subscriptions.map((sub) => {
+          const amt = sub.cadence === 'annual' ? sub.amount / 12 : sub.amount;
+          const review = pending.has(sub.merchant)
+            ? `<span class="sn-tag">${t(lang, 'v2.sheet.review')}</span>`
+            : '';
+          let extra = '';
+          if (sub.trial?.endsAt) {
+            const days = Math.ceil((new Date(sub.trial.endsAt) - Date.now()) / 86400000);
+            if (days > 0 && days <= 7) {
+              extra = `<div style="font-size:12px;color:var(--sn-ink-3);margin-top:2px">${lang === 'zh-TW' ? `試用還有 ${days} 天` : `Trial ends in ${days} days`}</div>`;
+            }
+          }
+          return `<div class="sn-row"><span>${sub.merchant}${review}${extra}</span><span class="num">US$${amt}</span></div>`;
+        }).join('');
+        body += `
+          <div class="sn-budget-row">
+            <span>${t(lang, 'v2.sheet.budget', { n: money(demo.budget.monthlyLimit) }).replace(`US$${money(demo.budget.monthlyLimit)}`, `US$<span id="budgetValue">${money(demo.budget.monthlyLimit)}</span>`)}</span>
+            <span class="sn-stepper">
+              <button type="button" id="budgetMinus" aria-label="Decrease">−</button>
+              <button type="button" id="budgetPlus" aria-label="Increase">+</button>
+            </span>
+          </div>`;
+      } else if (kind === 'safety') {
+        title = t(lang, 'v2.sheet.safety');
+        body = `
+          <p>${t(lang, 'v2.safety.local')}</p>
+          <p>${t(lang, 'v2.safety.signed')}</p>
+          <p>${t(lang, 'v2.safety.mandate')}</p>
+          <p>${t(lang, 'v2.safety.audit')}</p>
+          <p>${t(lang, 'v2.safety.tiers')}</p>
+          <p>${t(lang, 'v2.safety.limits')}</p>`;
+      } else {
+        title = t(lang, 'v2.sheet.log');
+        const entries = demo.mandateManager.getAuditLog().getAllEntries().slice().reverse();
+        body = entries.length
+          ? entries.map((e, i) => `
+              <div class="audit-entry">
+                <strong>${i + 1}. ${e.action} — ${e.result}</strong>
+                <div>${e.actor || ''}${e.metadata?.merchant ? ` · ${e.metadata.merchant}` : ''}</div>
+                <div class="sn-mono num">${e.timestamp ? new Date(e.timestamp).toLocaleString() : ''}</div>
+              </div>`).join('')
+          : `<p class="sn-card__reason">${t(lang, 'v2.sheet.emptyLog')}</p>`;
+      }
+
+      sheet.hidden = false;
+      scrim.hidden = false;
+      sheet.innerHTML = `
+        <div class="sn-sheet__head">
+          <b id="sheetTitle">${title}</b>
+          <button type="button" class="sn-ghost" id="sheetClose" data-i18n="v2.sheet.close">${t(lang, 'v2.sheet.close')}</button>
+        </div>
+        ${body}`;
+      requestAnimationFrame(() => {
+        sheet.classList.add('is-on');
+        scrim.classList.add('is-on');
+      });
+      $('#sheetClose').onclick = closeSheet;
+      scrim.onclick = closeSheet;
+      if (kind === 'tools') {
+        $('#budgetMinus').onclick = () => {
+          demo.budget.monthlyLimit = Math.max(10, demo.budget.monthlyLimit - 10);
+          recomputeQueue();
+          openSheet('tools', sheetOpener);
+        };
+        $('#budgetPlus').onclick = () => {
+          demo.budget.monthlyLimit += 10;
+          recomputeQueue();
+          openSheet('tools', sheetOpener);
+        };
+      }
+      $('#sheetClose').focus();
+    }
+
+    function closeSheet() {
+      const sheet = $('#sheet');
+      const scrim = $('#scrim');
+      sheet.classList.remove('is-on');
+      scrim.classList.remove('is-on');
+      setTimeout(() => {
+        sheet.hidden = true;
+        scrim.hidden = true;
+        sheet.innerHTML = '';
+        if (sheetOpener && typeof sheetOpener.focus === 'function') sheetOpener.focus();
+      }, reducedMotion ? 0 : 260);
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !$('#sheet').hidden) {
+        e.preventDefault();
+        closeSheet();
+      }
     });
 
-    refreshSnapshot();
-    renderFindings();
+    $('#toolsBtn').onclick = () => openSheet('tools', $('#toolsBtn'));
+    $('#toolsBtnMobile').onclick = () => openSheet('tools', $('#toolsBtnMobile'));
+    document.querySelector('[data-testid="open-safety"]').onclick = (e) => openSheet('safety', e.currentTarget);
+    $('#langBtn').onclick = () => {
+      lang = lang === 'en' ? 'zh-TW' : 'en';
+      setLang(lang);
+      render();
+    };
+
+    // Preserve lang on judge link
+    const judgeLink = document.querySelector('[data-testid="judge-link"]');
+    judgeLink.href = `judge.html?lang=${encodeURIComponent(lang)}`;
+    document.addEventListener('sx:lang', () => {
+      judgeLink.href = `judge.html?lang=${encodeURIComponent(document.documentElement.lang)}`;
+    });
+
+    render();
   </script>
 </body>
 </html>

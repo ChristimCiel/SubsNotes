@@ -22,6 +22,11 @@ export function createJudgeData() {
       status: 'active',
       nextDate: '2026-12-01',
       category: 'Chat',
+      plans: [
+        { id: 'basic', name: 'Basic', price: 8 },
+        { id: 'plus', name: 'Plus', price: 20 }
+      ],
+      currentPlanId: 'plus',
       priceHistory: [
         { amount: 16.00, effectiveDate: '2025-01-01' },
         { amount: 20.00, effectiveDate: '2026-11-01' }
@@ -33,7 +38,12 @@ export function createJudgeData() {
       cadence: 'monthly',
       status: 'active',
       nextDate: '2026-12-03',
-      category: 'Chat'
+      category: 'Chat',
+      plans: [
+        { id: 'lite', name: 'Lite', price: 10 },
+        { id: 'pro', name: 'Pro', price: 18 }
+      ],
+      currentPlanId: 'pro'
     },
     {
       merchant: 'PromptForge Team',
@@ -154,6 +164,52 @@ export function getStackSnapshot(budget, recommendations) {
     overlaps,
     unused,
     findings: actionable.slice(0, 3)
+  };
+}
+
+/**
+ * Honest monthly saving for a finding (never invents a downgrade amount).
+ * @returns {number|null} null when type is downgrade but no lower-tier savings exist
+ */
+export function savingFor(rec) {
+  const t = rec.recommendation.type;
+  const monthly = rec.subscription.cadence === 'annual'
+    ? rec.subscription.amount / 12
+    : rec.subscription.amount;
+  if (t === 'cancel') return monthly;
+  if (t === 'downgrade') {
+    const a = (rec.recommendation.actions || []).find(
+      (x) => x.action === 'downgrade' && typeof x.estimatedSavings === 'number'
+    );
+    return a ? a.estimatedSavings : null;
+  }
+  return 0;
+}
+
+/**
+ * Target plan name for a downgrade finding, or null.
+ */
+export function targetPlanName(rec) {
+  if (rec.recommendation.type !== 'downgrade') return null;
+  const a = (rec.recommendation.actions || []).find((x) => x.action === 'downgrade');
+  if (!a || !a.label) return null;
+  const m = a.label.match(/Downgrade to (.+)$/);
+  return m ? m[1] : null;
+}
+
+/**
+ * Decision queue for the v2 home: honest waste total over the 3 surfaced findings.
+ */
+export function getDecisionQueue(budget, recommendations) {
+  const snap = getStackSnapshot(budget, recommendations);
+  const findings = snap.findings.map((rec) => ({ rec, saving: savingFor(rec) }));
+  const waste = findings.reduce((s, f) => s + (f.saving || 0), 0);
+  return {
+    total: snap.spent,
+    tools: snap.tools,
+    findings,
+    waste,
+    envelope: snap.envelope
   };
 }
 

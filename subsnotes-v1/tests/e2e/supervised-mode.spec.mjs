@@ -9,7 +9,7 @@ test.describe('T1 Supervised Mode', () => {
     await page.goto('http://localhost:4199/supervised.html');
 
     // Check page loaded
-    await expect(page.locator('h1')).toContainText('T1: Supervised Cancellation');
+    await expect(page.locator('h1')).toContainText('Cancel it yourself, step by step');
 
     // Step 1: Prepare
     await expect(page.locator('#step1')).toBeVisible();
