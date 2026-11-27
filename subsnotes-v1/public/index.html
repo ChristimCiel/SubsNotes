@@ -5,26 +5,42 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SubsNotes — One decision at a time</title>
   <link rel="stylesheet" href="./subsnotes.css">
+  <style>
+    .sn-tabs { display: flex; gap: 4px; margin-bottom: 16px; flex-wrap: wrap; }
+    .sn-tabs button {
+      border: 1px solid var(--sn-line); background: var(--sn-surface); border-radius: 999px;
+      padding: 8px 14px; min-height: 40px; font-size: 14px; color: var(--sn-ink-2);
+    }
+    .sn-tabs button.is-on { background: var(--sn-forest); color: #fff; border-color: var(--sn-forest); }
+    .sn-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; font-size: 14px; }
+    .sn-field input, .sn-field select, .sn-field textarea {
+      border: 1px solid var(--sn-line); border-radius: 10px; padding: 10px 12px;
+      font: inherit; background: var(--sn-surface); min-height: 44px;
+    }
+    .sn-field textarea { min-height: 140px; resize: vertical; }
+    .sn-import-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+    .sn-secondary-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  </style>
 </head>
 <body class="sn">
   <a class="sn-skip" href="#decision" data-i18n="v2.skip">Skip to decision</a>
   <header class="sn-bar">
     <a class="sn-brand" href="/" data-testid="brand"><i aria-hidden="true"></i>SubsNotes</a>
     <nav class="sn-bar__r">
-      <button type="button" class="sn-ghost" id="toolsBtn" data-testid="open-tools" data-i18n="v2.bar.tools">Your 7 tools</button>
-      <a class="sn-ghost sn-ghost--pill" href="judge.html" data-testid="judge-link" data-i18n="v2.bar.judge">Judge demo</a>
+      <button type="button" class="sn-ghost" id="importBtn" data-testid="open-import" data-i18n="v3.bar.import">Import</button>
+      <button type="button" class="sn-ghost" id="toolsBtn" data-testid="open-tools">Your tools</button>
       <button type="button" class="sn-ghost" id="langBtn" data-testid="language-toggle" data-i18n="nav.lang">中文</button>
     </nav>
   </header>
 
   <main class="sn-main">
     <p class="sn-label">
-      <span data-i18n="v2.hero.label">Your AI tools this month</span>
-      <span class="sn-chip" data-i18n="v2.chip.sample">Sample data</span>
+      <span data-i18n="v2.hero.label">Your subscriptions this month</span>
+      <span class="sn-chip" id="dataChip" data-testid="data-chip" data-i18n="v3.chip.sample">Sample data</span>
     </p>
 
     <section class="sn-hero">
-      <h1 class="sn-total num" data-testid="monthly-total">US$<span id="total">128</span><small data-i18n="v2.unit.mo">/mo</small></h1>
+      <h1 class="sn-total num" data-testid="monthly-total"><span id="totalLabel">US$128</span><small data-i18n="v2.unit.mo">/mo</small></h1>
       <p class="sn-hook" id="hook" data-testid="hook"></p>
       <p class="sn-saved num" id="saved" data-testid="saved-so-far" aria-live="polite" hidden></p>
     </section>
@@ -38,6 +54,7 @@
     <article class="sn-card" id="decision" data-testid="decision-card" data-state="ask" aria-live="polite" tabindex="-1"></article>
     <p class="sn-tools-mobile">
       <button type="button" class="sn-ghost" id="toolsBtnMobile" data-i18n="v2.bar.toolsMobile">See all 7 tools</button>
+      <button type="button" class="sn-ghost" id="importBtnMobile" data-i18n="v3.bar.import">Import</button>
     </p>
 
     <section class="sn-how" aria-label="How it works">
@@ -56,7 +73,7 @@
     </section>
 
     <p class="sn-fine">
-      <span data-i18n="v2.fine.price">US$30/month when it launches.</span>
+      <span data-i18n="v3.fine.privacy">Private by design — everything stays on this device.</span>
       ·
       <button type="button" data-testid="open-safety" data-i18n="v2.fine.safety">Privacy &amp; safety details</button>
       ·
@@ -69,155 +86,106 @@
   <div class="sn-toast" id="toast" role="status" aria-live="polite"></div>
 
   <script type="module">
-    import {
-      createJudgeData,
-      generateJudgeRecommendations,
-      getDecisionQueue,
-      targetPlanName
-    } from '/src/judge-mode.mjs';
+    import { analyzeSampleStack, analyzeUserSubscriptions, formatMoney, formatSpendBreakdown, monthlyEquivalent } from '/src/analyzer.mjs';
     import { MockExecutor } from '/src/mock-executor.mjs';
+    import { parseReceiptText, parseImportFile, normalizeSubscription } from '/src/receipt-parser.mjs';
+    import {
+      loadUserData, saveUserSubscriptions, clearUserData, exportUserJson,
+      loadDecisionLog, appendDecisionLog, loadDoneIds, markDoneId
+    } from '/src/storage.mjs';
+    import { buildActionEmail, mailtoHref, copyText, downloadIcs, downloadTextFile } from '/src/actions.mjs';
     import { detectLang, setLang, t, applyI18n } from './i18n.mjs';
 
-    const demo = createJudgeData();
-    let recommendations = generateJudgeRecommendations(demo.subscriptions, demo.budget);
-    let queue = getDecisionQueue(demo.budget, recommendations);
-
     let lang = applyI18n(document, detectLang());
+    let reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let sheetOpener = null;
+    let importTab = 'paste';
+
+    let userSubs = loadUserData().subscriptions || [];
+    let mode = userSubs.length ? 'user' : 'sample';
+    let sample = analyzeSampleStack();
+    let analysis = mode === 'user'
+      ? analyzeUserSubscriptions(userSubs, { doneIds: loadDoneIds() })
+      : sample;
+
     let index = 0;
-    let savedTotal = 0;
+    let savedTotal = 0; // sample USD only for demo tween
     let state = 'ask';
     let lastConfirmation = '';
-    let sheetOpener = null;
-    let reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let sheetKind = null;
 
-    const $ = (sel) => document.querySelector(sel);
+    const $ = (s) => document.querySelector(s);
 
-    function money(n) {
-      return Math.round(Number(n));
-    }
-
-    function resolveFinding(item) {
-      const rec = item.rec;
-      let saving = item.saving;
-      let kind = rec.recommendation.type;
-      let plan = targetPlanName(rec);
-      if (kind === 'downgrade' && saving == null) {
-        kind = 'cancel';
-        plan = null;
-        saving = rec.subscription.cadence === 'annual'
-          ? rec.subscription.amount / 12
-          : rec.subscription.amount;
+    function refreshAnalysis() {
+      if (mode === 'user') {
+        analysis = analyzeUserSubscriptions(userSubs, { doneIds: loadDoneIds() });
+      } else {
+        sample = analyzeSampleStack();
+        analysis = sample;
       }
-      return { rec, saving: saving || 0, kind, plan };
     }
 
-    function remainingWaste() {
+    function showToast(msg) {
+      const el = $('#toast');
+      el.textContent = msg;
+      el.classList.add('is-visible');
+      clearTimeout(el._timer);
+      el._timer = setTimeout(() => el.classList.remove('is-visible'), 4000);
+    }
+
+    function updateChrome() {
+      const n = analysis.tools;
+      $('#toolsBtn').textContent = t(lang, 'v3.bar.tools', { n });
+      const chip = $('#dataChip');
+      if (mode === 'user') {
+        chip.textContent = t(lang, 'v3.chip.local');
+        chip.removeAttribute('data-i18n');
+      } else {
+        chip.textContent = t(lang, 'v3.chip.sample');
+        chip.setAttribute('data-i18n', 'v3.chip.sample');
+      }
+    }
+
+    function remainingWasteLabel() {
+      if (mode === 'sample') {
+        const start = state === 'done' ? index + 1 : index;
+        const waste = analysis.findings.slice(start).reduce((s, f) => s + f.saving, 0);
+        return waste > 0 ? formatMoney(waste, 'USD') : null;
+      }
       const start = state === 'done' ? index + 1 : index;
-      return queue.findings.slice(start).reduce((s, f) => {
-        const r = resolveFinding(f);
-        return s + r.saving;
-      }, 0);
-    }
-
-    function currentSpend() {
-      return money(queue.total - savedTotal);
-    }
-
-    function tween(el, to) {
-      const from = Number(el.textContent) || 0;
-      if (reducedMotion || from === to) {
-        el.textContent = String(to);
-        return;
+      const map = {};
+      for (const f of analysis.findings.slice(start)) {
+        const cur = f.subscription.currency || 'USD';
+        map[cur] = (map[cur] || 0) + f.saving;
       }
-      const t0 = performance.now();
-      const dur = 420;
-      (function frame(now) {
-        const p = Math.min(1, (now - t0) / dur);
-        const e = 1 - Math.pow(1 - p, 3);
-        el.textContent = String(Math.round(from + (to - from) * e));
-        if (p < 1) requestAnimationFrame(frame);
-      })(t0);
+      const label = formatSpendBreakdown(map);
+      return Object.keys(map).length ? label : null;
     }
 
-    function pctIncrease(sub) {
-      if (!sub.priceHistory || sub.priceHistory.length < 2) return null;
-      const a = sub.priceHistory[sub.priceHistory.length - 2].amount;
-      const b = sub.priceHistory[sub.priceHistory.length - 1].amount;
-      return Math.round(((b - a) / a) * 100);
-    }
-
-    function otherMerchant(rec) {
-      const reason = (rec.recommendation.reasons || []).find((r) => r.startsWith('Similar services:'));
-      if (!reason) return '';
-      return reason.replace('Similar services: ', '').split(',')[0].trim();
-    }
-
-    function plainReason(resolved) {
-      const risks = resolved.rec.recommendation.risks || [];
-      const sub = resolved.rec.subscription;
-      const other = otherMerchant(resolved.rec);
-      const category = t(lang, `v2.category.${sub.category}`) || sub.category.toLowerCase();
-      const plan = resolved.plan || '';
-      const days = (() => {
-        const r = (resolved.rec.recommendation.reasons || []).find((x) => /Not used in (\d+)/.test(x));
-        return r ? r.match(/Not used in (\d+)/)[1] : '60';
-      })();
-      const pct = pctIncrease(sub) ?? 0;
-
-      if (risks.includes('price_increase') && risks.includes('duplicate')) {
-        return t(lang, 'v2.reason.price_dup', { pct, other, category });
+    function currentTotalLabel() {
+      if (mode === 'sample') {
+        return formatMoney(Math.round(analysis.byCurrency.USD - savedTotal), 'USD');
       }
-      if (risks.includes('unused') && risks.includes('duplicate')) {
-        return t(lang, 'v2.reason.unused_dup', { days, other });
-      }
-      if (risks.includes('duplicate')) {
-        return t(lang, 'v2.reason.dup', { other, category, plan });
-      }
-      if (risks.includes('unused')) {
-        return t(lang, 'v2.reason.unused', { days });
-      }
-      return (resolved.rec.recommendation.reasons || [])[0] || '';
-    }
-
-    function titleFor(resolved) {
-      if (resolved.kind === 'downgrade' && resolved.plan) {
-        return t(lang, 'v2.title.downgrade', {
-          merchant: resolved.rec.subscription.merchant,
-          plan: resolved.plan
-        });
-      }
-      return t(lang, 'v2.title.cancel', { merchant: resolved.rec.subscription.merchant });
-    }
-
-    function actionPhrase(resolved) {
-      if (resolved.kind === 'downgrade' && resolved.plan) {
-        return t(lang, 'v2.action.switch', {
-          merchant: resolved.rec.subscription.merchant,
-          plan: resolved.plan
-        });
-      }
-      return t(lang, 'v2.action.cancel', { merchant: resolved.rec.subscription.merchant });
-    }
-
-    function dotsHtml(activeIdx) {
-      return queue.findings.map((_, k) =>
-        `<i class="${k <= activeIdx ? 'is-on' : ''}" aria-hidden="true"></i>`
-      ).join('');
+      return analysis.totalLabel;
     }
 
     function updateHero() {
-      const waste = remainingWaste();
+      const waste = remainingWasteLabel();
       const hook = $('#hook');
-      if (waste <= 0 || index >= queue.findings.length) {
-        hook.textContent = t(lang, 'v2.hook.done');
+      if (!waste || index >= analysis.findings.length) {
+        hook.innerHTML = mode === 'user' && !analysis.findings.length
+          ? t(lang, 'v3.hook.none')
+          : t(lang, 'v2.hook.done');
+      } else if (mode === 'sample') {
+        hook.innerHTML = t(lang, 'v2.hook', { waste: waste.replace(/^US\$/, '') });
       } else {
-        hook.innerHTML = t(lang, 'v2.hook', { waste: money(waste) });
+        hook.innerHTML = t(lang, 'v3.hook.multi', { waste });
       }
-      tween($('#total'), currentSpend());
+      $('#totalLabel').textContent = currentTotalLabel().replace(/\/mo$/, '');
       const savedEl = $('#saved');
-      if (savedTotal > 0) {
+      if (mode === 'sample' && savedTotal > 0) {
         savedEl.hidden = false;
-        savedEl.textContent = t(lang, 'v2.saved', { n: money(savedTotal) });
+        savedEl.textContent = t(lang, 'v2.saved', { n: Math.round(savedTotal) });
         requestAnimationFrame(() => savedEl.classList.add('is-on'));
       } else {
         savedEl.classList.remove('is-on');
@@ -227,154 +195,272 @@
 
     function buildStrip() {
       const strip = $('#strip');
-      if (!strip.children.length) {
-        strip.innerHTML = demo.subscriptions.map((sub) => {
-          const amt = sub.cadence === 'annual' ? sub.amount / 12 : sub.amount;
-          return `<div class="sn-seg" data-merchant="${sub.merchant}" style="flex-grow:${amt}" title="${sub.merchant} · US$${amt}/mo"></div>`;
-        }).join('');
-      }
-      [...strip.children].forEach((el) => {
-        const merchant = el.dataset.merchant;
-        const sub = demo.subscriptions.find((s) => s.merchant === merchant);
-        const amt = sub.cadence === 'annual' ? sub.amount / 12 : sub.amount;
-        const fIdx = queue.findings.findIndex((f) => f.rec.subscription.merchant === merchant);
-        el.className = 'sn-seg';
-        el.style.flexGrow = String(amt);
-        if (fIdx >= 0 && fIdx < index) {
-          const resolved = resolveFinding(queue.findings[fIdx]);
-          const next = Math.max(0, amt - resolved.saving);
-          el.style.flexGrow = String(next);
-          if (next <= 0) el.classList.add('is-gone');
-        } else if (fIdx >= 0 && fIdx >= index && state !== 'all-done') {
-          el.classList.add('is-trim');
-          if (fIdx === index && state !== 'all-done') el.classList.add('is-focus');
+      const subs = analysis.subscriptions.filter((s) => s.status !== 'cancelled');
+      strip.innerHTML = subs.map((sub) => {
+        const amt = monthlyEquivalent(sub);
+        const pending = analysis.findings.slice(index).some((f) => f.subscription.id === sub.id || f.subscription.merchant === sub.merchant);
+        const done = analysis.findings.slice(0, index).some((f) => f.subscription.id === sub.id || f.subscription.merchant === sub.merchant);
+        const focus = analysis.findings[index] && (analysis.findings[index].subscription.id === sub.id || analysis.findings[index].subscription.merchant === sub.merchant);
+        let cls = 'sn-seg';
+        let grow = amt;
+        if (done) {
+          const f = analysis.findings.find((x) => x.subscription.id === sub.id || x.subscription.merchant === sub.merchant);
+          grow = Math.max(0, amt - (f?.saving || 0));
+          if (grow <= 0) cls += ' is-gone';
+        } else if (pending) {
+          cls += ' is-trim';
+          if (focus && state !== 'all-done') cls += ' is-focus';
         }
-      });
+        return `<div class="${cls}" style="flex-grow:${grow}" title="${sub.merchant} · ${formatMoney(amt, sub.currency || 'USD')}/mo"></div>`;
+      }).join('');
     }
 
-    function showToast(message) {
-      const el = $('#toast');
-      el.textContent = message;
-      el.classList.add('is-visible');
-      clearTimeout(el._timer);
-      el._timer = setTimeout(() => el.classList.remove('is-visible'), 4000);
+    function dotsHtml(activeIdx) {
+      return analysis.findings.map((_, k) =>
+        `<i class="${k <= activeIdx ? 'is-on' : ''}" aria-hidden="true"></i>`
+      ).join('');
+    }
+
+    function sampleTitle(f) {
+      if (f.kind === 'downgrade' && f.plan) {
+        return t(lang, 'v2.title.downgrade', { merchant: f.subscription.merchant, plan: f.plan });
+      }
+      return t(lang, 'v2.title.cancel', { merchant: f.subscription.merchant });
+    }
+
+    function sampleReason(f) {
+      const risks = f.risks || [];
+      const other = (f.reasons.find((r) => r.startsWith('Similar services:')) || '').replace('Similar services: ', '').split(',')[0].trim();
+      const category = t(lang, `v2.category.${f.subscription.category}`) || f.subscription.category;
+      const days = (f.reasons.find((r) => /Not used in (\d+)/.exec(r)) || '').match(/Not used in (\d+)/)?.[1] || '60';
+      let pct = 0;
+      if (f.subscription.priceHistory?.length >= 2) {
+        const a = f.subscription.priceHistory.at(-2).amount;
+        const b = f.subscription.priceHistory.at(-1).amount;
+        pct = Math.round(((b - a) / a) * 100);
+      }
+      if (risks.includes('price_increase') && risks.includes('duplicate')) {
+        return t(lang, 'v2.reason.price_dup', { pct, other, category });
+      }
+      if (risks.includes('unused') && risks.includes('duplicate')) {
+        return t(lang, 'v2.reason.unused_dup', { days, other });
+      }
+      if (risks.includes('duplicate')) {
+        return t(lang, 'v2.reason.dup', { other, category, plan: f.plan || '' });
+      }
+      return f.reasons[0] || '';
+    }
+
+    function userTitle(f) {
+      return t(lang, f.titleKey, { merchant: f.subscription.merchant });
+    }
+
+    function userReason(f) {
+      return t(lang, f.reasonKey, {
+        merchant: f.subscription.merchant,
+        other: f.other?.merchant || '',
+        category: t(lang, `v2.category.${f.category}`) || f.category || '',
+        days: f.days ?? '',
+        amount: formatMoney(f.subscription.amount, f.subscription.currency || 'USD')
+      });
     }
 
     function renderAsk() {
-      const item = queue.findings[index];
-      const resolved = resolveFinding(item);
       const card = $('#decision');
+      if (!analysis.findings.length) {
+        state = 'all-done';
+        renderAllDone();
+        return;
+      }
+      const f = analysis.findings[index];
       card.dataset.state = 'ask';
-      card.innerHTML = `
-        <div class="sn-card__kick">
-          <span>${t(lang, 'v2.card.of', { i: index + 1, n: queue.findings.length })}</span>
-          <span class="sn-dots">${dotsHtml(index)}</span>
-        </div>
-        <h2 class="sn-card__title">${titleFor(resolved)}</h2>
-        <p class="sn-card__reason">${plainReason(resolved)}</p>
-        <div class="sn-cta">
-          <button type="button" class="sn-btn sn-btn--primary" data-testid="approve-finding">${t(lang, 'v2.card.approve', { n: money(resolved.saving) })}</button>
-          <button type="button" class="sn-btn sn-btn--quiet" data-testid="keep-finding">${t(lang, 'v2.card.keep')}</button>
-        </div>
-        <details>
-          <summary>${t(lang, 'v2.card.why')}</summary>
-          <ul>${(resolved.rec.recommendation.reasons || []).map((r) => `<li>${r}</li>`).join('')}</ul>
-          <p class="sn-will"></p>
-        </details>`;
-      const m = resolved.rec.subscription.merchant;
-      const willAction = resolved.kind === 'downgrade' && resolved.plan
-        ? (lang === 'zh-TW' ? `把 ${m} 降級為 ${resolved.plan}` : `switch ${m} to ${resolved.plan}`)
-        : (lang === 'zh-TW' ? `取消 ${m}` : `cancel ${m}`);
-      card.querySelector('.sn-will').textContent = lang === 'zh-TW'
-        ? `SubsNotes 只會替你${willAction}，不做其他事。這次授權 7 天後失效。`
-        : `SubsNotes will ${willAction} for you — nothing else. The permission expires in 7 days.`;
-
-      card.querySelector('[data-testid="approve-finding"]').onclick = () => approveFinding(resolved);
-      card.querySelector('[data-testid="keep-finding"]').onclick = () => keepFinding(resolved);
+      if (mode === 'sample') {
+        card.innerHTML = `
+          <div class="sn-card__kick">
+            <span>${t(lang, 'v2.card.of', { i: index + 1, n: analysis.findings.length })}</span>
+            <span class="sn-dots">${dotsHtml(index)}</span>
+          </div>
+          <h2 class="sn-card__title">${sampleTitle(f)}</h2>
+          <p class="sn-card__reason">${sampleReason(f)}</p>
+          <div class="sn-cta">
+            <button type="button" class="sn-btn sn-btn--primary" data-testid="approve-finding">${t(lang, 'v2.card.approve', { n: Math.round(f.saving) })}</button>
+            <button type="button" class="sn-btn sn-btn--quiet" data-testid="keep-finding">${t(lang, 'v2.card.keep')}</button>
+          </div>
+          <details>
+            <summary>${t(lang, 'v2.card.why')}</summary>
+            <ul>${(f.reasons || []).map((r) => `<li>${r}</li>`).join('')}</ul>
+          </details>`;
+        card.querySelector('[data-testid="approve-finding"]').onclick = () => sampleApprove(f);
+        card.querySelector('[data-testid="keep-finding"]').onclick = () => sampleKeep(f);
+      } else {
+        const amountLabel = formatMoney(f.subscription.amount, f.subscription.currency || 'USD');
+        card.innerHTML = `
+          <div class="sn-card__kick">
+            <span>${t(lang, 'v2.card.of', { i: index + 1, n: analysis.findings.length })}</span>
+            <span class="sn-dots">${dotsHtml(index)}</span>
+          </div>
+          <h2 class="sn-card__title">${userTitle(f)}</h2>
+          <p class="sn-card__reason">${userReason(f)}</p>
+          <div class="sn-cta" id="primaryCta"></div>
+          <div class="sn-secondary-row">
+            <button type="button" class="sn-btn sn-btn--quiet" data-testid="mark-done">${t(lang, 'v3.cta.markDone')}</button>
+            <button type="button" class="sn-btn sn-btn--quiet" data-testid="keep-finding">${t(lang, 'v3.cta.keep')}</button>
+          </div>`;
+        const primary = card.querySelector('#primaryCta');
+        if (f.primaryAction === 'open_billing' && f.subscription.billingUrl) {
+          primary.innerHTML = `<a class="sn-btn sn-btn--primary" data-testid="approve-finding" href="${f.subscription.billingUrl}" target="_blank" rel="noopener">${t(lang, 'v3.cta.openBilling')}</a>`;
+        } else if (f.primaryAction === 'ics' && f.icsDate) {
+          primary.innerHTML = `<button type="button" class="sn-btn sn-btn--primary" data-testid="approve-finding">${t(lang, 'v3.cta.ics')}</button>`;
+          primary.querySelector('button').onclick = () => {
+            downloadIcs({
+              title: `${f.subscription.merchant} renewal`,
+              description: userReason(f),
+              targetDate: f.icsDate
+            });
+            showToast(t(lang, 'v3.toast.ics'));
+          };
+        } else {
+          primary.innerHTML = `
+            <button type="button" class="sn-btn sn-btn--primary" data-testid="approve-finding">${t(lang, 'v3.cta.copyEmail')}</button>
+            <a class="sn-btn sn-btn--quiet" id="mailtoLink">${t(lang, 'v3.cta.mailto')}</a>`;
+          const email = buildActionEmail({
+            lang,
+            kind: f.emailKind || 'cancel',
+            merchant: f.subscription.merchant,
+            plan: f.subscription.plan,
+            amountLabel
+          });
+          primary.querySelector('[data-testid="approve-finding"]').onclick = async () => {
+            const ok = await copyText(`${email.subject}\n\n${email.body}`);
+            showToast(ok ? t(lang, 'v3.toast.copied') : email.subject);
+          };
+          primary.querySelector('#mailtoLink').href = mailtoHref(email);
+        }
+        if (f.icsDate && f.primaryAction !== 'ics') {
+          const icsBtn = document.createElement('button');
+          icsBtn.type = 'button';
+          icsBtn.className = 'sn-btn sn-btn--quiet';
+          icsBtn.textContent = t(lang, 'v3.cta.ics');
+          icsBtn.onclick = () => {
+            downloadIcs({
+              title: `${f.subscription.merchant} reminder`,
+              description: userReason(f),
+              targetDate: f.icsDate
+            });
+            showToast(t(lang, 'v3.toast.ics'));
+          };
+          card.querySelector('.sn-secondary-row').prepend(icsBtn);
+        }
+        card.querySelector('[data-testid="keep-finding"]').onclick = () => userKeep(f);
+        card.querySelector('[data-testid="mark-done"]').onclick = () => userMarkDone(f);
+      }
     }
 
-    async function approveFinding(resolved) {
+    async function sampleApprove(f) {
       const future = new Date();
       future.setDate(future.getDate() + 7);
-      const mandate = demo.mandateManager.createMandate({
-        merchant: resolved.rec.subscription.merchant,
-        action: resolved.kind === 'downgrade' ? 'downgrade' : 'cancel',
+      const mandate = sample.demo.mandateManager.createMandate({
+        merchant: f.subscription.merchant,
+        action: f.kind === 'downgrade' ? 'downgrade' : 'cancel',
         scope: 'single',
-        maxAmount: resolved.rec.subscription.amount,
+        maxAmount: f.subscription.amount,
         expiresAt: future.toISOString()
       });
-      const approved = demo.mandateManager.approveMandate(mandate.id, 'user_click');
-
+      const approved = sample.demo.mandateManager.approveMandate(mandate.id, 'user_click');
       state = 'working';
-      renderWorking(resolved);
-
-      const stepEls = [...document.querySelectorAll('#decision .sn-run li')];
-      const tick = (k) => {
-        if (stepEls[k]) {
-          stepEls[k].classList.add('is-ok');
-          stepEls[k].querySelector('i').textContent = '✓';
-        }
-      };
-      if (!reducedMotion) {
-        setTimeout(() => tick(0), 350);
-        setTimeout(() => tick(1), 800);
-        setTimeout(() => tick(2), 1250);
-      } else {
-        stepEls.forEach((_, k) => tick(k));
-      }
-
-      const executor = new MockExecutor();
-      const started = Date.now();
-      const result = await executor.execute(approved, {
-        subscriptionDetails: resolved.rec.subscription
-      });
-      const wait = Math.max(0, 1400 - (Date.now() - started));
-      if (wait && !reducedMotion) await new Promise((r) => setTimeout(r, wait));
-      else if (reducedMotion) await new Promise((r) => setTimeout(r, 0));
-
-      if (result.success) {
-        demo.mandateManager.executeMandate(mandate.id, result);
-        lastConfirmation = result.evidence?.confirmationId || '';
-        savedTotal += resolved.saving;
-        state = 'done';
-        render();
-      }
-    }
-
-    function keepFinding(resolved) {
-      demo.mandateManager.getAuditLog().logEntry({
-        mandateId: `kept_${resolved.rec.subscription.merchant.replace(/\s+/g, '_')}`,
-        action: 'kept',
-        result: 'success',
-        actor: 'user',
-        metadata: { merchant: resolved.rec.subscription.merchant }
-      });
-      showToast(t(lang, 'v2.toast.kept', { merchant: resolved.rec.subscription.merchant }));
-      index += 1;
-      state = index >= queue.findings.length ? 'all-done' : 'ask';
-      render();
-    }
-
-    function renderWorking(resolved) {
       const card = $('#decision');
       card.dataset.state = 'working';
       card.innerHTML = `
-        <div class="sn-card__kick">
-          <span>${t(lang, 'v2.run.title')}</span>
-          <span class="sn-dots">${dotsHtml(index)}</span>
-        </div>
-        <h2 class="sn-card__title">${titleFor(resolved)}</h2>
+        <div class="sn-card__kick"><span>${t(lang, 'v2.run.title')}</span><span class="sn-dots">${dotsHtml(index)}</span></div>
+        <h2 class="sn-card__title">${sampleTitle(f)}</h2>
         <ol class="sn-run" aria-live="polite">
           <li><i></i>${t(lang, 'v2.run.1')}</li>
           <li><i></i>${t(lang, 'v2.run.2')}</li>
           <li><i></i>${t(lang, 'v2.run.3')}</li>
         </ol>`;
-      updateHero();
-      buildStrip();
+      const lis = [...card.querySelectorAll('.sn-run li')];
+      const tick = (k) => { if (lis[k]) { lis[k].classList.add('is-ok'); lis[k].querySelector('i').textContent = '✓'; } };
+      if (!reducedMotion) {
+        setTimeout(() => tick(0), 350);
+        setTimeout(() => tick(1), 800);
+        setTimeout(() => tick(2), 1250);
+      } else lis.forEach((_, k) => tick(k));
+
+      const executor = new MockExecutor();
+      const started = Date.now();
+      const result = await executor.execute(approved, { subscriptionDetails: f.subscription });
+      const wait = Math.max(0, 1400 - (Date.now() - started));
+      if (wait && !reducedMotion) await new Promise((r) => setTimeout(r, wait));
+      if (result.success) {
+        sample.demo.mandateManager.executeMandate(mandate.id, result);
+        lastConfirmation = result.evidence?.confirmationId || '';
+        savedTotal += f.saving;
+        state = 'done';
+        render();
+      }
+    }
+
+    function sampleKeep(f) {
+      sample.demo.mandateManager.getAuditLog().logEntry({
+        mandateId: `kept_${f.subscription.merchant.replace(/\s+/g, '_')}`,
+        action: 'kept',
+        result: 'success',
+        actor: 'user',
+        metadata: { merchant: f.subscription.merchant }
+      });
+      showToast(t(lang, 'v2.toast.kept', { merchant: f.subscription.merchant }));
+      index += 1;
+      state = index >= analysis.findings.length ? 'all-done' : 'ask';
+      render();
+    }
+
+    function userKeep(f) {
+      markDoneId(f.id);
+      appendDecisionLog({ action: 'kept', merchant: f.subscription.merchant, result: 'kept' });
+      showToast(t(lang, 'v3.toast.kept', { merchant: f.subscription.merchant }));
+      refreshAnalysis();
+      index = 0;
+      state = analysis.findings.length ? 'ask' : 'all-done';
+      render();
+    }
+
+    function userMarkDone(f) {
+      const card = $('#decision');
+      card.dataset.state = 'done';
+      card.innerHTML = `
+        <div class="sn-card__kick"><span>${t(lang, 'v3.done.title')}</span></div>
+        <h2 class="sn-card__title">${userTitle(f)}</h2>
+        <div class="sn-field">
+          <label>${t(lang, 'v3.done.confirmPrompt')}</label>
+          <input id="confirmInput" data-testid="confirm-input" placeholder="CNF-…" />
+        </div>
+        <div class="sn-cta">
+          <button type="button" class="sn-btn sn-btn--primary" id="saveDone">${t(lang, 'v3.done.save')}</button>
+        </div>`;
+      card.querySelector('#saveDone').onclick = () => {
+        const conf = card.querySelector('#confirmInput').value.trim();
+        // Remove or mark cancelled in local list
+        userSubs = userSubs.map((s) => s.id === f.subscription.id
+          ? { ...s, status: 'cancelled', notes: conf || s.notes }
+          : s);
+        saveUserSubscriptions(userSubs);
+        markDoneId(f.id);
+        appendDecisionLog({
+          action: 'marked_done',
+          merchant: f.subscription.merchant,
+          result: 'success',
+          confirmationId: conf || null
+        });
+        showToast(t(lang, 'v3.toast.marked', { merchant: f.subscription.merchant }));
+        refreshAnalysis();
+        index = 0;
+        state = analysis.findings.length ? 'ask' : 'all-done';
+        render();
+      };
     }
 
     function renderDone() {
-      const resolved = resolveFinding(queue.findings[index]);
+      const f = analysis.findings[index];
       const card = $('#decision');
       card.dataset.state = 'done';
       card.innerHTML = `
@@ -382,9 +468,9 @@
           <span>${t(lang, 'v2.done.kicker')}</span>
           <span class="sn-dots">${dotsHtml(index)}</span>
         </div>
-        <h2 class="sn-card__title">${titleFor(resolved)}</h2>
+        <h2 class="sn-card__title">${sampleTitle(f)}</h2>
         <div class="sn-receipt">
-          <span class="sn-receipt__amt num">+US$${money(resolved.saving)}<span>${t(lang, 'v2.done.saved')}</span></span>
+          <span class="sn-receipt__amt num">+US$${Math.round(f.saving)}<span>${t(lang, 'v2.done.saved')}</span></span>
           <span class="sn-mono">${lastConfirmation}</span>
         </div>
         <div class="sn-cta" style="margin-top:18px">
@@ -394,7 +480,7 @@
       next.focus();
       next.onclick = () => {
         index += 1;
-        state = index >= queue.findings.length ? 'all-done' : 'ask';
+        state = index >= analysis.findings.length ? 'all-done' : 'ask';
         render();
       };
     }
@@ -404,19 +490,23 @@
       card.dataset.state = 'all-done';
       card.innerHTML = `
         <h2 class="sn-card__title">${t(lang, 'v2.all.title')}</h2>
-        <p class="sn-card__reason">${t(lang, 'v2.all.sub', { n: currentSpend() })}</p>
+        <p class="sn-card__reason">${mode === 'sample'
+          ? t(lang, 'v2.all.sub', { n: Math.round((analysis.byCurrency.USD || 0) - savedTotal) })
+          : t(lang, 'v3.hook.none')}</p>
         <div class="sn-cta">
           <button type="button" class="sn-btn sn-btn--primary" id="seeLog">${t(lang, 'v2.all.log')}</button>
-          <a class="sn-btn sn-btn--quiet" href="supervised.html">${t(lang, 'v2.all.guided')}</a>
+          <button type="button" class="sn-btn sn-btn--quiet" id="openImportDone" data-i18n="v3.bar.import">${t(lang, 'v3.bar.import')}</button>
         </div>`;
       card.querySelector('#seeLog').onclick = () => openSheet('log', card.querySelector('#seeLog'));
+      card.querySelector('#openImportDone').onclick = () => openSheet('import', card.querySelector('#openImportDone'));
     }
 
     function render() {
       applyI18n(document, lang);
+      updateChrome();
       updateHero();
       buildStrip();
-      if (index >= queue.findings.length) {
+      if (!analysis.findings.length || index >= analysis.findings.length) {
         state = 'all-done';
         renderAllDone();
         return;
@@ -424,98 +514,6 @@
       if (state === 'ask') renderAsk();
       else if (state === 'done') renderDone();
       else if (state === 'all-done') renderAllDone();
-    }
-
-    function recomputeQueue() {
-      recommendations = generateJudgeRecommendations(demo.subscriptions, demo.budget);
-      queue = getDecisionQueue(demo.budget, recommendations);
-      // Keep index within bounds; preserve completed progress by merchant when possible
-      if (index > queue.findings.length) index = queue.findings.length;
-      $('#strip').innerHTML = '';
-      buildStrip();
-    }
-
-    function openSheet(kind, opener) {
-      sheetOpener = opener || document.activeElement;
-      const sheet = $('#sheet');
-      const scrim = $('#scrim');
-      let body = '';
-      let title = '';
-
-      if (kind === 'tools') {
-        title = t(lang, 'v2.sheet.tools');
-        const pending = new Set(queue.findings.slice(index).map((f) => f.rec.subscription.merchant));
-        body = demo.subscriptions.map((sub) => {
-          const amt = sub.cadence === 'annual' ? sub.amount / 12 : sub.amount;
-          const review = pending.has(sub.merchant)
-            ? `<span class="sn-tag">${t(lang, 'v2.sheet.review')}</span>`
-            : '';
-          let extra = '';
-          if (sub.trial?.endsAt) {
-            const days = Math.ceil((new Date(sub.trial.endsAt) - Date.now()) / 86400000);
-            if (days > 0 && days <= 7) {
-              extra = `<div style="font-size:12px;color:var(--sn-ink-3);margin-top:2px">${lang === 'zh-TW' ? `試用還有 ${days} 天` : `Trial ends in ${days} days`}</div>`;
-            }
-          }
-          return `<div class="sn-row"><span>${sub.merchant}${review}${extra}</span><span class="num">US$${amt}</span></div>`;
-        }).join('');
-        body += `
-          <div class="sn-budget-row">
-            <span>${t(lang, 'v2.sheet.budget', { n: money(demo.budget.monthlyLimit) }).replace(`US$${money(demo.budget.monthlyLimit)}`, `US$<span id="budgetValue">${money(demo.budget.monthlyLimit)}</span>`)}</span>
-            <span class="sn-stepper">
-              <button type="button" id="budgetMinus" aria-label="Decrease">−</button>
-              <button type="button" id="budgetPlus" aria-label="Increase">+</button>
-            </span>
-          </div>`;
-      } else if (kind === 'safety') {
-        title = t(lang, 'v2.sheet.safety');
-        body = `
-          <p>${t(lang, 'v2.safety.local')}</p>
-          <p>${t(lang, 'v2.safety.signed')}</p>
-          <p>${t(lang, 'v2.safety.mandate')}</p>
-          <p>${t(lang, 'v2.safety.audit')}</p>
-          <p>${t(lang, 'v2.safety.tiers')}</p>
-          <p>${t(lang, 'v2.safety.limits')}</p>`;
-      } else {
-        title = t(lang, 'v2.sheet.log');
-        const entries = demo.mandateManager.getAuditLog().getAllEntries().slice().reverse();
-        body = entries.length
-          ? entries.map((e, i) => `
-              <div class="audit-entry">
-                <strong>${i + 1}. ${e.action} — ${e.result}</strong>
-                <div>${e.actor || ''}${e.metadata?.merchant ? ` · ${e.metadata.merchant}` : ''}</div>
-                <div class="sn-mono num">${e.timestamp ? new Date(e.timestamp).toLocaleString() : ''}</div>
-              </div>`).join('')
-          : `<p class="sn-card__reason">${t(lang, 'v2.sheet.emptyLog')}</p>`;
-      }
-
-      sheet.hidden = false;
-      scrim.hidden = false;
-      sheet.innerHTML = `
-        <div class="sn-sheet__head">
-          <b id="sheetTitle">${title}</b>
-          <button type="button" class="sn-ghost" id="sheetClose" data-i18n="v2.sheet.close">${t(lang, 'v2.sheet.close')}</button>
-        </div>
-        ${body}`;
-      requestAnimationFrame(() => {
-        sheet.classList.add('is-on');
-        scrim.classList.add('is-on');
-      });
-      $('#sheetClose').onclick = closeSheet;
-      scrim.onclick = closeSheet;
-      if (kind === 'tools') {
-        $('#budgetMinus').onclick = () => {
-          demo.budget.monthlyLimit = Math.max(10, demo.budget.monthlyLimit - 10);
-          recomputeQueue();
-          openSheet('tools', sheetOpener);
-        };
-        $('#budgetPlus').onclick = () => {
-          demo.budget.monthlyLimit += 10;
-          recomputeQueue();
-          openSheet('tools', sheetOpener);
-        };
-      }
-      $('#sheetClose').focus();
     }
 
     function closeSheet() {
@@ -527,8 +525,191 @@
         sheet.hidden = true;
         scrim.hidden = true;
         sheet.innerHTML = '';
-        if (sheetOpener && typeof sheetOpener.focus === 'function') sheetOpener.focus();
+        sheetOpener?.focus?.();
       }, reducedMotion ? 0 : 260);
+    }
+
+    function openSheet(kind, opener) {
+      sheetOpener = opener || document.activeElement;
+      sheetKind = kind;
+      const sheet = $('#sheet');
+      const scrim = $('#scrim');
+      let title = '';
+      let body = '';
+
+      if (kind === 'tools') {
+        title = t(lang, 'v2.sheet.tools');
+        const pending = new Set(analysis.findings.slice(index).map((f) => f.subscription.id || f.subscription.merchant));
+        body = analysis.subscriptions.filter((s) => s.status !== 'cancelled').map((sub) => {
+          const review = pending.has(sub.id) || pending.has(sub.merchant)
+            ? `<span class="sn-tag">${t(lang, 'v2.sheet.review')}</span>` : '';
+          return `<div class="sn-row"><span>${sub.merchant}${review}</span><span class="num">${formatMoney(monthlyEquivalent(sub), sub.currency || 'USD')}</span></div>`;
+        }).join('') || `<p>${t(lang, 'v3.hook.none')}</p>`;
+      } else if (kind === 'safety') {
+        title = t(lang, 'v2.sheet.safety');
+        body = `<p>${t(lang, 'v3.safety.body')}</p>`;
+      } else if (kind === 'log') {
+        title = t(lang, 'v2.sheet.log');
+        const entries = mode === 'sample'
+          ? (sample.demo.mandateManager.getAuditLog().getAllEntries() || []).slice().reverse()
+          : loadDecisionLog();
+        body = entries.length
+          ? entries.map((e, i) => `<div class="audit-entry"><strong>${i + 1}. ${e.action} — ${e.result || ''}</strong><div>${e.merchant || e.metadata?.merchant || e.actor || ''}</div><div class="sn-mono">${e.timestamp ? new Date(e.timestamp).toLocaleString() : ''}</div></div>`).join('')
+          : `<p>${t(lang, 'v2.sheet.emptyLog')}</p>`;
+      } else if (kind === 'import') {
+        title = t(lang, 'v3.import.title');
+        body = renderImportBody();
+      }
+
+      sheet.hidden = false;
+      scrim.hidden = false;
+      sheet.innerHTML = `
+        <div class="sn-sheet__head">
+          <b id="sheetTitle">${title}</b>
+          <button type="button" class="sn-ghost" id="sheetClose">${t(lang, 'v2.sheet.close')}</button>
+        </div>${body}`;
+      requestAnimationFrame(() => {
+        sheet.classList.add('is-on');
+        scrim.classList.add('is-on');
+      });
+      $('#sheetClose').onclick = closeSheet;
+      scrim.onclick = closeSheet;
+      if (kind === 'import') wireImportSheet();
+      $('#sheetClose').focus();
+    }
+
+    function renderImportBody() {
+      return `
+        <div class="sn-tabs" role="tablist">
+          <button type="button" data-tab="paste" class="${importTab === 'paste' ? 'is-on' : ''}">${t(lang, 'v3.import.tab.paste')}</button>
+          <button type="button" data-tab="upload" class="${importTab === 'upload' ? 'is-on' : ''}">${t(lang, 'v3.import.tab.upload')}</button>
+          <button type="button" data-tab="manual" class="${importTab === 'manual' ? 'is-on' : ''}">${t(lang, 'v3.import.tab.manual')}</button>
+        </div>
+        <div id="importPane"></div>
+        <div class="sn-import-actions">
+          <button type="button" class="sn-btn sn-btn--quiet" id="exportJson">${t(lang, 'v3.import.export')}</button>
+          <button type="button" class="sn-btn sn-btn--quiet" id="switchSample">${t(lang, 'v3.import.sample')}</button>
+          <button type="button" class="sn-btn sn-btn--quiet" id="clearData">${t(lang, 'v3.import.clear')}</button>
+        </div>
+        <p id="importStatus" class="sn-card__reason" style="margin-top:12px" data-testid="import-status"></p>`;
+    }
+
+    function wireImportSheet() {
+      const pane = $('#importPane');
+      const setPane = () => {
+        if (importTab === 'paste') {
+          pane.innerHTML = `
+            <p class="sn-card__reason">${t(lang, 'v3.import.pasteHint')}</p>
+            <div class="sn-field"><textarea id="pasteArea" data-testid="paste-area" placeholder="${t(lang, 'v3.import.pastePlaceholder')}"></textarea></div>
+            <button type="button" class="sn-btn sn-btn--primary" id="parsePaste" data-testid="parse-paste">${t(lang, 'v3.import.parse')}</button>`;
+          $('#parsePaste').onclick = () => {
+            const rows = parseReceiptText($('#pasteArea').value);
+            applyImport(rows);
+          };
+        } else if (importTab === 'upload') {
+          pane.innerHTML = `
+            <p class="sn-card__reason">${t(lang, 'v3.import.uploadHint')}</p>
+            <div class="sn-field"><input type="file" id="fileInput" data-testid="file-input" accept=".csv,.eml,.json,text/csv,message/rfc822,application/json" /></div>`;
+          $('#fileInput').onchange = async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            const text = await file.text();
+            try {
+              const rows = parseImportFile({ name: file.name, text });
+              applyImport(rows);
+            } catch (err) {
+              $('#importStatus').textContent = String(err.message || err);
+            }
+          };
+        } else {
+          pane.innerHTML = `
+            <div class="sn-field"><label>${t(lang, 'v3.import.manual.name')}</label><input id="mName" data-testid="manual-name" /></div>
+            <div class="sn-field"><label>${t(lang, 'v3.import.manual.plan')}</label><input id="mPlan" /></div>
+            <div class="sn-field"><label>${t(lang, 'v3.import.manual.amount')}</label><input id="mAmount" type="number" step="0.01" data-testid="manual-amount" /></div>
+            <div class="sn-field"><label>${t(lang, 'v3.import.manual.currency')}</label>
+              <select id="mCurrency"><option>USD</option><option>TWD</option><option>EUR</option></select></div>
+            <div class="sn-field"><label>${t(lang, 'v3.import.manual.cycle')}</label>
+              <select id="mCycle"><option value="monthly">${t(lang, 'v3.import.cycle.monthly')}</option><option value="annual">${t(lang, 'v3.import.cycle.annual')}</option></select></div>
+            <div class="sn-field"><label>${t(lang, 'v3.import.manual.renewal')}</label><input id="mDate" type="date" /></div>
+            <div class="sn-field"><label>${t(lang, 'v3.import.manual.category')}</label>
+              <select id="mCat"><option>Chat</option><option>Coding</option><option>Image</option><option>Notes</option><option>Media</option><option>Other</option></select></div>
+            <div class="sn-field"><label>${t(lang, 'v3.import.manual.status')}</label>
+              <select id="mStatus">
+                <option value="active">${t(lang, 'v3.import.status.active')}</option>
+                <option value="trial">${t(lang, 'v3.import.status.trial')}</option>
+                <option value="payment_failed">${t(lang, 'v3.import.status.failed')}</option>
+                <option value="cancelled">${t(lang, 'v3.import.status.cancelled')}</option>
+              </select></div>
+            <button type="button" class="sn-btn sn-btn--primary" id="manualAdd" data-testid="manual-add">${t(lang, 'v3.import.manual.add')}</button>`;
+          $('#manualAdd').onclick = () => {
+            const row = normalizeSubscription({
+              merchant: $('#mName').value,
+              plan: $('#mPlan').value || null,
+              amount: Number($('#mAmount').value),
+              currency: $('#mCurrency').value,
+              cadence: $('#mCycle').value,
+              nextDate: $('#mDate').value || null,
+              category: $('#mCat').value,
+              status: $('#mStatus').value,
+              source: 'manual'
+            });
+            if (!row.merchant || !row.amount) {
+              $('#importStatus').textContent = t(lang, 'v3.import.empty');
+              return;
+            }
+            applyImport([row]);
+            showToast(t(lang, 'v3.toast.added', { merchant: row.merchant }));
+          };
+        }
+      };
+      sheet.querySelectorAll('[data-tab]').forEach((btn) => {
+        btn.onclick = () => {
+          importTab = btn.dataset.tab;
+          openSheet('import', sheetOpener);
+        };
+      });
+      setPane();
+      $('#exportJson').onclick = () => {
+        downloadTextFile('subsnotes-backup.json', exportUserJson(), 'application/json');
+      };
+      $('#switchSample').onclick = () => {
+        mode = 'sample';
+        index = 0;
+        savedTotal = 0;
+        state = 'ask';
+        refreshAnalysis();
+        closeSheet();
+        render();
+      };
+      $('#clearData').onclick = () => {
+        clearUserData();
+        userSubs = [];
+        mode = 'sample';
+        index = 0;
+        savedTotal = 0;
+        state = 'ask';
+        refreshAnalysis();
+        showToast(t(lang, 'v3.toast.cleared'));
+        closeSheet();
+        render();
+      };
+    }
+
+    function applyImport(rows) {
+      if (!rows?.length) {
+        $('#importStatus').textContent = t(lang, 'v3.import.empty');
+        return;
+      }
+      userSubs = [...userSubs, ...rows];
+      saveUserSubscriptions(userSubs);
+      mode = 'user';
+      index = 0;
+      savedTotal = 0;
+      state = 'ask';
+      refreshAnalysis();
+      $('#importStatus').textContent = t(lang, 'v3.import.result', { n: rows.length });
+      showToast(t(lang, 'v3.toast.imported', { n: rows.length }));
+      render();
     }
 
     document.addEventListener('keydown', (e) => {
@@ -538,6 +719,8 @@
       }
     });
 
+    $('#importBtn').onclick = () => openSheet('import', $('#importBtn'));
+    $('#importBtnMobile').onclick = () => openSheet('import', $('#importBtnMobile'));
     $('#toolsBtn').onclick = () => openSheet('tools', $('#toolsBtn'));
     $('#toolsBtnMobile').onclick = () => openSheet('tools', $('#toolsBtnMobile'));
     document.querySelector('[data-testid="open-safety"]').onclick = (e) => openSheet('safety', e.currentTarget);
@@ -546,13 +729,6 @@
       setLang(lang);
       render();
     };
-
-    // Preserve lang on judge link
-    const judgeLink = document.querySelector('[data-testid="judge-link"]');
-    judgeLink.href = `judge.html?lang=${encodeURIComponent(lang)}`;
-    document.addEventListener('sx:lang', () => {
-      judgeLink.href = `judge.html?lang=${encodeURIComponent(document.documentElement.lang)}`;
-    });
 
     render();
   </script>

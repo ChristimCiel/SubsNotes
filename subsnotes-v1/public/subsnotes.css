@@ -659,8 +659,8 @@ body.sn-secondary {
 
 @media (max-width: 600px) {
   .sn-bar { padding: 0 12px; }
-  #toolsBtn { display: none; }
-  .sn-tools-mobile { display: block; }
+  #toolsBtn, #importBtn { display: none; }
+  .sn-tools-mobile { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
   .sn-main { padding: 20px 20px 72px; }
   .sn-total { font-size: 64px; line-height: 64px; }
   .sn-total small { font-size: 22px; }

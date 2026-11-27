@@ -33,10 +33,13 @@ describe('v2 primary surface jargon', () => {
     const withoutSheet = html
       .replace(/<aside[\s\S]*?<\/aside>/i, '')
       .replace(/<script[\s\S]*?<\/script>/gi, '');
-    const main = withoutSheet.match(/<main[\s\S]*?<\/main>/i)?.[0] || withoutSheet;
+    const chrome = withoutSheet
+      .replace(/<script[\s\S]*?<\/script>/gi, '');
     for (const w of BANNED) {
-      if (w === 'Judge') continue; // Judge demo pill is allowed in the bar, not main
-      assert.equal(main.includes(w), false, `main contains "${w}"`);
+      assert.equal(chrome.includes(w), false, `primary HTML contains "${w}"`);
     }
+    // Competition / judge framing must stay off the consumer top bar
+    assert.equal(chrome.includes('Judge demo'), false);
+    assert.equal(chrome.includes('data-testid="judge-link"'), false);
   });
 });
