@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en" data-product="subsnotes">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SubsNotes — Judge Mode</title>
+  <link rel="stylesheet" href="./subsnotes.css">
+  <style>
+    .sx-shell .sx-main, .sn-secondary .sn-page { max-width: 720px; margin: 0 auto; padding: 24px 20px 64px; }
+    .sx-eyebrow { font-size: 13px; color: var(--sn-ink-3); margin: 0 0 8px; }
+    .sx-h1 { font-size: 32px; letter-spacing: -0.02em; margin: 0 0 8px; }
+    .sx-sub { color: var(--sn-ink-2); margin: 0 0 12px; }
+    .sx-chip { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--sn-sunken); color: var(--sn-ink-2); }
+    .sx-stepper { display: flex; gap: 12px; list-style: none; padding: 0; margin: 24px 0; flex-wrap: wrap; font-size: 13px; color: var(--sn-ink-3); }
+    .sx-stepper .is-done, .sx-stepper .is-active { color: var(--sn-ink); font-weight: 600; }
+    .sx-stepper .is-active { color: var(--sn-forest); }
+    .sx-card, .recommendation-card, .mandate-box, .execution-box { background: var(--sn-surface); border: 1px solid var(--sn-hairline); border-radius: 16px; box-shadow: var(--sn-shadow); padding: 20px; margin-bottom: 12px; }
+    .sx-row { display: flex; flex-wrap: wrap; gap: 16px; }
+    .sx-stat__label { display: block; font-size: 12px; color: var(--sn-ink-3); }
+    .sx-stat__value { font-family: var(--sx-mono); font-size: 20px; font-variant-numeric: tabular-nums; }
+    .sx-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 10px 18px; border-radius: 12px; border: 0; font-weight: 600; cursor: pointer; }
+    .sx-btn--primary { background: var(--sn-forest); color: #fff; }
+    .sx-btn--ghost { background: none; color: var(--sn-ink-2); }
+    .sx-muted { color: var(--sn-ink-2); font-size: 14px; }
+    .sx-approval { border: 1px solid var(--sn-mint-line); background: var(--sn-mint); border-radius: 16px; padding: 20px; margin: 16px 0; }
+    .sx-approval__kicker { font-size: 12px; color: var(--sn-forest); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+    .sx-approval__facts { display: grid; grid-template-columns: 140px 1fr; gap: 8px 16px; margin: 12px 0; font-size: 14px; }
+    .sx-approval__facts dt { color: var(--sn-ink-2); }
+    .sx-approval__facts dd { margin: 0; }
+    .sx-approval__footer { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+    .sx-approval__reassure { font-size: 13px; color: var(--sn-ink-2); }
+    .sx-status--caution { background: var(--sn-trim-bg); color: var(--sn-trim-ink); border-radius: 999px; padding: 2px 8px; font-size: 12px; }
+    .audit-entry { padding: 10px 0; border-bottom: 1px solid var(--sn-hairline); font-size: 14px; }
+    .progress-bar { height: 8px; background: var(--sn-sunken); border-radius: 999px; overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--sn-forest); }
+    .progress-text { font-size: 13px; color: var(--sn-ink-2); margin-top: 6px; }
+    .sn-back { display: inline-block; margin: 16px 20px 0; color: var(--sn-ink-2); text-decoration: none; font-size: 14px; }
+    .sn-back:hover { color: var(--sn-ink); }
+  </style>
+</head>
+<body class="sn-secondary">
+  <a class="sn-back" href="index.html" data-i18n="judge.back">← Back to SubsNotes</a>
+  <header class="sn-bar">
+    <a class="sn-brand" href="index.html"><i aria-hidden="true"></i>SubsNotes</a>
+    <nav class="sn-bar__r">
+      <span class="sn-ghost sn-ghost--pill" data-i18n="nav.judge">Judge Mode</span>
+      <button type="button" class="sn-ghost" id="langBtn" data-testid="language-toggle" data-i18n="nav.lang">中文</button>
+    </nav>
+  </header>
+
+  <main class="sn-page">
+    <div id="content">
+      <p class="sx-eyebrow" data-i18n="nav.judge">Judge Mode</p>
+      <h1 class="sx-h1">SubsNotes closed loop</h1>
+      <p class="sx-sub" data-i18n="judge.purpose">One-click offline demo of the closed loop. Pauses for your approval at step 3.</p>
+      <span class="sx-chip" data-i18n="chip.sample">Sample data</span>
+
+      <ol class="sx-stepper" id="judgeStepper" style="margin-top: var(--sx-6)">
+        <li class="is-todo" data-i18n="step.detect">Detect</li>
+        <li class="is-todo" data-i18n="step.judge">Judge</li>
+        <li class="is-todo" data-i18n="step.approve">Approve</li>
+        <li class="is-todo" data-i18n="step.execute">Execute</li>
+        <li class="is-todo" data-i18n="step.verify">Verify</li>
+      </ol>
+
+      <div class="sx-card" style="margin-bottom: var(--sx-4)">
+        <div class="sx-row" style="gap: var(--sx-6)">
+          <div class="sx-stat"><span class="sx-stat__label">Monthly Budget</span><span class="sx-stat__value sx-num">$<span id="budgetLimit">0.00</span></span></div>
+          <div class="sx-stat"><span class="sx-stat__label">Allocated</span><span class="sx-stat__value sx-num">$<span id="budgetAllocated">0.00</span></span></div>
+          <div class="sx-stat"><span class="sx-stat__label">Remaining</span><span class="sx-stat__value sx-num">$<span id="budgetRemaining">0.00</span></span></div>
+          <div class="sx-stat"><span class="sx-stat__label">Subscriptions</span><span class="sx-stat__value sx-num" id="subCount">0</span></div>
+        </div>
+      </div>
+
+      <div id="recommendations"></div>
+      <div id="mandate" class="mandate-box" style="margin: var(--sx-4) 0"></div>
+      <div id="approvalSlot"></div>
+      <div id="execution" class="execution-box" style="margin: var(--sx-4) 0"></div>
+      <div id="auditLog"></div>
+
+      <div class="progress-container" id="progressContainer" style="display: none;">
+        <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width: 0%"></div></div>
+        <div class="progress-text" id="progressText">Initializing...</div>
+      </div>
+
+      <button class="sx-btn sx-btn--primary" onclick="runDemo()" id="runBtn" data-i18n="judge.run">Run the full loop</button>
+    </div>
+  </main>
+
+  <script type="module">
+    import { createJudgeData, generateJudgeRecommendations } from '/src/judge-mode.mjs';
+    import { getBudgetSummary } from '/src/budget.mjs';
+    import { MockExecutor } from '/src/mock-executor.mjs';
+    import { applyI18n, detectLang, toggleLang, t } from './i18n.mjs';
+
+    let lang = applyI18n(document, detectLang());
+    document.getElementById('langBtn')?.addEventListener('click', () => {
+      lang = toggleLang(document);
+    });
+    const shell = { getLang: () => (document.documentElement.lang === 'zh-TW' ? 'zh-TW' : 'en') };
+
+    let demoData = null;
+    let pendingMandate = null;
+    let pendingRec = null;
+
+    function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+    function setJudgeStep(n) {
+      const nodes = [...document.querySelectorAll('#judgeStepper li')];
+      nodes.forEach((el, i) => {
+        el.classList.remove('is-done', 'is-active', 'is-todo');
+        if (i < n) el.classList.add('is-done');
+        else if (i === n) el.classList.add('is-active');
+        else el.classList.add('is-todo');
+      });
+    }
+
+    window.runDemo = async function () {
+      const lang = shell.getLang();
+      const btn = document.getElementById('runBtn');
+      const progressContainer = document.getElementById('progressContainer');
+      const progressFill = document.getElementById('progressFill');
+      const progressText = document.getElementById('progressText');
+
+      btn.disabled = true;
+      btn.style.display = 'none';
+      progressContainer.style.display = 'block';
+      document.getElementById('approvalSlot').innerHTML = '';
+      document.getElementById('execution').innerHTML = '';
+      document.getElementById('auditLog').innerHTML = '';
+      document.getElementById('mandate').innerHTML = '';
+
+      const updateProgress = (percent, text) => {
+        progressFill.style.width = percent + '%';
+        progressText.textContent = text;
+      };
+
+      try {
+        updateProgress(20, lang === 'en' ? 'Initializing budget...' : '初始化預算中...');
+        setJudgeStep(0);
+        demoData = createJudgeData();
+        const summary = getBudgetSummary(demoData.budget);
+        document.getElementById('budgetLimit').textContent = summary.limit.replace('$', '');
+        document.getElementById('budgetAllocated').textContent = summary.allocated.replace('$', '');
+        document.getElementById('budgetRemaining').textContent = summary.remaining.replace('$', '');
+        document.getElementById('subCount').textContent = summary.subscriptionCount;
+        await sleep(200);
+
+        updateProgress(40, lang === 'en' ? 'Generating recommendations...' : '生成推薦中...');
+        setJudgeStep(1);
+        const recommendations = generateJudgeRecommendations(demoData.subscriptions, demoData.budget);
+        const actionable = recommendations.filter((r) => r.recommendation.type !== 'keep');
+        const topRec = actionable[0] || recommendations[0];
+        document.getElementById('recommendations').innerHTML = actionable.slice(0, 3).map((rec) => `
+          <div class="recommendation-card${rec === topRec ? ' sx-card--focus' : ''}">
+            <div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline">
+              <strong>${rec.subscription.merchant}</strong>
+              <span class="sx-status sx-status--caution">${rec.recommendation.type}</span>
+            </div>
+            <div class="sx-muted">${lang === 'en' ? 'Confidence' : '信心度'}: ${(rec.recommendation.confidence * 100).toFixed(0)}%</div>
+            <ul>${rec.recommendation.reasons.map((r) => `<li>${r}</li>`).join('')}</ul>
+          </div>`).join('');
+        await sleep(200);
+
+        updateProgress(55, lang === 'en' ? 'Creating mandate...' : '建立授權中...');
+        setJudgeStep(2);
+        pendingRec = topRec;
+        const futureDate = new Date();
+        futureDate.setDate(futureDate.getDate() + 7);
+        const action = topRec.recommendation.type === 'downgrade' ? 'downgrade' : 'cancel';
+        pendingMandate = demoData.mandateManager.createMandate({
+          merchant: topRec.subscription.merchant,
+          action,
+          scope: 'single',
+          maxAmount: topRec.subscription.amount,
+          expiresAt: futureDate.toISOString()
+        });
+
+        document.getElementById('mandate').innerHTML = `
+          <div><strong>${lang === 'en' ? 'Mandate ID' : '授權 ID'}:</strong> ${pendingMandate.id}</div>
+          <div><strong>${lang === 'en' ? 'Merchant' : '商家'}:</strong> ${pendingMandate.merchant}</div>
+          <div><strong>${lang === 'en' ? 'Action' : '動作'}:</strong> ${pendingMandate.action}</div>
+          <div><strong>${lang === 'en' ? 'Status' : '狀態'}:</strong> ${pendingMandate.status}</div>`;
+
+        updateProgress(60, t(lang, 'judge.pause'));
+        progressContainer.style.display = 'none';
+
+        const slot = document.getElementById('approvalSlot');
+        slot.innerHTML = `
+          <section class="sx-approval" role="region" aria-labelledby="judgeApprovalTitle" tabindex="-1">
+            <div class="sx-approval__header">
+              <span class="sx-approval__kicker">${t(lang, 'approval.kicker')}</span>
+              <h3 class="sx-approval__title" id="judgeApprovalTitle">${pendingMandate.action} ${pendingMandate.merchant}</h3>
+            </div>
+            <dl class="sx-approval__facts">
+              <dt>${t(lang, 'approval.what')}</dt><dd>${pendingMandate.action} ${pendingMandate.merchant}</dd>
+              <dt>${t(lang, 'approval.scope')}</dt><dd>${pendingMandate.scope}</dd>
+              <dt>${t(lang, 'approval.limit')}</dt><dd class="sx-num">US$ ${Number(pendingMandate.maxAmount).toFixed(2)}</dd>
+              <dt>${t(lang, 'approval.expires')}</dt><dd class="sx-num">${new Date(pendingMandate.expiresAt).toLocaleString()}</dd>
+              <dt>${t(lang, 'approval.executedBy')}</dt><dd>MockExecutor · offline</dd>
+            </dl>
+            <div class="sx-approval__footer">
+              <button type="button" class="sx-btn sx-btn--primary" data-testid="approve-mandate" id="approveMandateBtn">${t(lang, 'judge.approve')}</button>
+              <button type="button" class="sx-btn sx-btn--ghost" id="judgeNotNow">${t(lang, 'approval.notNow')}</button>
+            </div>
+            <p class="sx-approval__reassure">${t(lang, 'approval.reassure')}</p>
+          </section>`;
+        slot.querySelector('.sx-approval').focus();
+
+        await new Promise((resolve) => {
+          document.getElementById('approveMandateBtn').onclick = () => resolve(true);
+          document.getElementById('judgeNotNow').onclick = () => {
+            btn.style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = t(lang, 'judge.run');
+            slot.innerHTML = '';
+            resolve(false);
+          };
+        }).then(async (ok) => {
+          if (!ok) return;
+
+          progressContainer.style.display = 'block';
+          updateProgress(80, lang === 'en' ? 'Executing cancellation...' : '執行取消中...');
+          setJudgeStep(3);
+
+          const approved = demoData.mandateManager.approveMandate(pendingMandate.id, 'user_signature_demo');
+          document.getElementById('mandate').innerHTML += `<div><strong>${lang === 'en' ? 'Approved' : '已批准'}:</strong> ${new Date(approved.approvedAt).toLocaleString()}</div>`;
+
+          const executor = new MockExecutor();
+          const result = await executor.execute(approved, { subscriptionDetails: pendingRec.subscription });
+
+          if (result.success) {
+            demoData.mandateManager.executeMandate(pendingMandate.id, result);
+            setJudgeStep(4);
+            document.getElementById('execution').innerHTML = `
+              <div class="execution-box">
+                <div><strong>${lang === 'en' ? 'Execution Successful' : '執行成功'}</strong></div>
+                <div style="margin: 10px 0;">${result.message}</div>
+                <div><strong>${lang === 'en' ? 'Confirmation' : '確認'}:</strong> ${result.evidence.confirmationId}</div>
+                <div><strong>${lang === 'en' ? 'Steps' : '步驟'}:</strong> ${result.evidence.steps.length}</div>
+                <div><strong>${lang === 'en' ? 'Duration' : '時長'}:</strong> ${result.evidence.duration}ms</div>
+              </div>`;
+          }
+
+          updateProgress(100, lang === 'en' ? 'Recording audit log...' : '記錄審計日誌中...');
+          const entries = demoData.mandateManager.getAuditLog().getAllEntries();
+          document.getElementById('auditLog').innerHTML = entries.map((entry, i) => `
+            <div class="audit-entry">
+              <strong>${i + 1}. ${entry.action} - ${entry.result}</strong>
+              <div>${lang === 'en' ? 'Actor' : '執行者'}: ${entry.actor}</div>
+              <div class="sx-num">${new Date(entry.timestamp).toLocaleString()}</div>
+            </div>`).join('');
+
+          slot.innerHTML = '';
+          progressContainer.style.display = 'none';
+          btn.style.display = 'block';
+          btn.disabled = false;
+          btn.textContent = lang === 'en' ? 'Demo Complete' : '展示完成';
+        });
+      } catch (error) {
+        progressContainer.style.display = 'none';
+        btn.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = lang === 'en' ? 'Demo Failed' : '展示失敗';
+        console.error(error);
+      }
+    };
+
+    document.addEventListener('sx:lang', () => applyI18n(document));
+  </script>
+</body>
+</html>

@@ -54,6 +54,9 @@ renew-before-mac/Core/Resources/ServiceLogos/*
 # Private maintainer material
 AGENTS.md
 docs/
+# Allow SubsNotes v1 competition screenshots committed for the draft PR
+!subsnotes-v1/docs/
+!subsnotes-v1/docs/**
 **/ROADMAP*
 **/EXECUTION_PLAN*
 **/NEXT_VERSION_PLAN*

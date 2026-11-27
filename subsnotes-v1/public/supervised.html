@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en" data-product="subsnotes">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cancel it yourself — SubsNotes</title>
+  <link rel="stylesheet" href="./subsnotes.css">
+  <style>
+    .sn-page { max-width: 960px; margin: 0 auto; padding: 24px 20px 64px; }
+    .sx-eyebrow { font-size: 13px; color: var(--sn-ink-3); margin: 0 0 8px; }
+    .sx-h1 { font-size: 32px; letter-spacing: -0.02em; margin: 0 0 8px; }
+    .sx-sub { color: var(--sn-ink-2); margin: 0 0 16px; }
+    .sx-card { background: var(--sn-surface); border: 1px solid var(--sn-hairline); border-radius: 16px; box-shadow: var(--sn-shadow); padding: 20px; margin-bottom: 16px; }
+    .sx-note { background: var(--sn-sunken); border-radius: 12px; padding: 12px 14px; font-size: 14px; color: var(--sn-ink-2); }
+    .sx-btn, .btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 10px 18px; border-radius: 12px; border: 0; font-weight: 600; cursor: pointer; font: inherit; }
+    .sx-btn--primary, .btn-primary { background: var(--sn-forest); color: #fff; }
+    .sx-btn--secondary, .sx-btn--ghost { background: var(--sn-surface); border: 1px solid var(--sn-line); color: var(--sn-ink); }
+    .sx-progress { height: 8px; background: var(--sn-sunken); border-radius: 999px; overflow: hidden; }
+    .sx-progress > span, #overallProgress { display: block; height: 100%; background: var(--sn-forest); width: 0%; }
+    .step-container { margin-bottom: 16px; }
+    .step-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+    .step-number {
+      width: 28px; height: 28px; border-radius: 50%;
+      border: 1px solid var(--sn-line);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 600; background: var(--sn-surface);
+    }
+    .step-number.completed { background: var(--sn-ink); color: #fff; border-color: var(--sn-ink); }
+    .step-number.pending { color: var(--sn-ink-3); }
+    .step-title { font-size: 17px; font-weight: 600; }
+    .step-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .merchant-preview {
+      border: 1px solid var(--sn-hairline);
+      border-radius: 12px;
+      overflow: hidden;
+      margin: 12px 0;
+      background: var(--sn-sunken);
+    }
+    .merchant-preview iframe { width: 100%; height: 280px; border: 0; background: #fff; }
+    .layout-guided { display: grid; grid-template-columns: 1fr; gap: 24px; }
+    .alert-warning { background: var(--sn-trim-bg); color: var(--sn-trim-ink); border-radius: 12px; padding: 12px 14px; }
+    .confirmation-box { background: var(--sn-mint); border-radius: 12px; padding: 14px; }
+    .sn-back { display: inline-block; margin: 16px 20px 0; color: var(--sn-ink-2); text-decoration: none; font-size: 14px; }
+    @media (min-width: 1024px) {
+      .layout-guided { grid-template-columns: 1.1fr 0.9fr; align-items: start; }
+      .merchant-preview iframe { height: 420px; }
+    }
+  </style>
+</head>
+<body class="sn-secondary">
+  <a class="sn-back" href="index.html">← Back to SubsNotes</a>
+  <header class="sn-bar">
+    <a class="sn-brand" href="index.html"><i aria-hidden="true"></i>SubsNotes</a>
+    <nav class="sn-bar__r">
+      <a class="sn-ghost sn-ghost--pill" href="judge.html">Judge demo</a>
+      <button type="button" class="sn-ghost" id="langBtn" data-i18n="nav.lang">中文</button>
+    </nav>
+  </header>
+
+  <main class="sn-page">
+    <p class="sx-eyebrow">Guided cancel</p>
+    <h1 class="sx-h1" data-i18n="supervised.h1">Cancel it yourself, step by step</h1>
+    <p class="sx-sub">Step-by-step guidance with your confirmation at each stage.</p>
+    <div class="sx-progress" style="margin: 16px 0 24px">
+      <span id="overallProgress" style="width: 0%"></span>
+    </div>
+
+    <div class="layout-guided">
+      <div>
+        <div class="sx-note" style="margin-bottom: var(--sx-4)">
+          <strong>Safe mode:</strong> You confirm each step. We guide, you control.
+        </div>
+
+        <div class="sx-card step-container" id="step1">
+          <div class="step-header">
+            <div class="step-number" id="step1Number">1</div>
+            <div class="step-title">Prepare for Cancellation</div>
+          </div>
+          <div class="step-instruction">
+            <h4>What we're about to do:</h4>
+            <p><strong>Merchant:</strong> Premium Streaming Service</p>
+            <p><strong>Subscription:</strong> $29.99/month</p>
+            <p><strong>Action:</strong> Cancel subscription</p>
+            <p><strong>Mandate expires:</strong> <span id="mandateExpiry"></span></p>
+          </div>
+          <div class="step-actions">
+            <button class="sx-btn sx-btn--primary btn btn-primary" onclick="completeStep(1)">Ready to Start</button>
+            <a class="sx-btn sx-btn--ghost btn btn-secondary" href="index.html">Cancel</a>
+          </div>
+        </div>
+
+        <div class="sx-card step-container hidden" id="step2">
+          <div class="step-header">
+            <div class="step-number pending" id="step2Number">2</div>
+            <div class="step-title">Log In to Merchant Site</div>
+          </div>
+          <div class="step-instruction">
+            <h4>Instructions:</h4>
+            <p>1. Open the merchant site (opens in new tab)</p>
+            <p>2. Enter your email and password</p>
+            <p>3. Complete 2FA if prompted</p>
+            <p><strong>Your credentials stay with you.</strong> We never see or store them.</p>
+          </div>
+          <div class="step-actions">
+            <button class="sx-btn sx-btn--primary btn btn-primary" onclick="openMerchant()">Open Merchant Site</button>
+            <button class="sx-btn sx-btn--secondary btn btn-secondary" onclick="completeStep(2)" disabled id="step2Confirm">I'm Logged In</button>
+          </div>
+        </div>
+
+        <div class="sx-card step-container hidden" id="step3">
+          <div class="step-header">
+            <div class="step-number pending" id="step3Number">3</div>
+            <div class="step-title">Navigate to Account Settings</div>
+          </div>
+          <div class="step-instruction">
+            <h4>Find the cancellation option:</h4>
+            <p>Look for one of these:</p>
+            <ul>
+              <li>"Manage Subscription"</li>
+              <li>"Account Settings"</li>
+              <li>"Cancel Subscription" (might be hidden or small)</li>
+            </ul>
+          </div>
+          <div class="alert-warning">
+            <strong>Dark Pattern Alert:</strong> This merchant hides the cancel link. Look for small text that says "Need to cancel your subscription?"
+          </div>
+          <div id="hintCallout" class="sx-note hidden" data-testid="hint-callout" style="margin-top: var(--sx-3)"></div>
+          <div class="step-actions">
+            <button class="sx-btn sx-btn--primary btn btn-primary" onclick="completeStep(3)">I Found the Cancel Option</button>
+            <button class="sx-btn sx-btn--secondary btn btn-secondary" onclick="showHint(3)">Show Me Where</button>
+          </div>
+        </div>
+
+        <div class="sx-card step-container hidden" id="step4">
+          <div class="step-header">
+            <div class="step-number pending" id="step4Number">4</div>
+            <div class="step-title">Handle Retention Offers</div>
+          </div>
+          <div class="step-instruction">
+            <h4>They may try to keep you:</h4>
+            <ul>
+              <li>Discount offers (e.g., "50% off for 3 months!")</li>
+              <li>"Limited time" urgency</li>
+              <li>Emotional appeals</li>
+            </ul>
+          </div>
+          <div class="confirmation-box">
+            <h4>Your Decision Required</h4>
+            <p>Did they show you a retention offer?</p>
+            <div class="step-actions">
+              <button class="sx-btn sx-btn--primary btn btn-primary" onclick="rejectOffer()">No Thanks, Continue Cancelling</button>
+              <button class="sx-btn sx-btn--danger-quiet btn btn-danger" onclick="acceptOffer()">Accept the Offer</button>
+            </div>
+          </div>
+          <div id="rescopeCallout" class="sx-note hidden" data-testid="rescope-callout" style="margin-top: var(--sx-3)"></div>
+        </div>
+
+        <div class="sx-card step-container hidden" id="step5">
+          <div class="step-header">
+            <div class="step-number pending" id="step5Number">5</div>
+            <div class="step-title">Confirm Cancellation</div>
+          </div>
+          <div class="step-instruction">
+            <h4>Final confirmation:</h4>
+            <p>They may use confirmshaming — guilt-inducing button text like:</p>
+            <ul>
+              <li>"Yes, I want to lose all these benefits"</li>
+              <li>"No, I don't want to save money"</li>
+            </ul>
+            <p><strong>It's OK to proceed.</strong> This is a dark pattern. Your decision is valid.</p>
+          </div>
+          <div class="alert-warning">
+            <strong>Dark Pattern:</strong> Confirmshaming makes you feel bad for cancelling. Ignore it.
+          </div>
+          <div class="step-actions">
+            <button class="sx-btn sx-btn--primary btn btn-primary" onclick="completeStep(5)">Confirmed Cancellation</button>
+          </div>
+        </div>
+
+        <div class="sx-card step-container hidden" id="step6">
+          <div class="step-header">
+            <div class="step-number pending" id="step6Number">6</div>
+            <div class="step-title">Verify Cancellation</div>
+          </div>
+          <div class="step-instruction">
+            <h4>Look for confirmation:</h4>
+            <p>Success screen or message</p>
+            <p>Confirmation number/ID</p>
+            <p>Confirmation email</p>
+            <p>Final billing date or access end date</p>
+          </div>
+          <div style="margin: var(--sx-4) 0">
+            <label style="display:block; margin-bottom: 8px; font-weight: 500;">Enter confirmation ID (optional):</label>
+            <input type="text" id="confirmationId" placeholder="e.g., CNF-2026-11-25-XY789"
+                   style="width:100%; padding:12px; border:1px solid var(--sx-line-strong); border-radius: var(--sx-r-sm); font: inherit; background: var(--sx-surface)">
+          </div>
+          <div class="step-actions">
+            <button class="sx-btn sx-btn--primary btn btn-primary" onclick="completeStep(6)">Cancellation Verified</button>
+          </div>
+        </div>
+
+        <div class="sx-card step-container hidden" id="stepSuccess">
+          <h3 style="margin: 0 0 var(--sx-3)">Cancellation Complete</h3>
+          <p><strong>Subscription:</strong> Premium Streaming ($29.99/month)</p>
+          <p><strong>Status:</strong> Cancelled</p>
+          <p><strong>Confirmation:</strong> <span id="finalConfirmation">Recorded in audit log</span></p>
+          <p style="margin-top: var(--sx-3)"><strong>Access until:</strong> End of current billing period</p>
+          <div class="step-actions">
+            <a class="sx-btn sx-btn--primary" href="index.html">Back to overview</a>
+            <a class="sx-btn sx-btn--secondary" href="judge.html">Judge Mode</a>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="sx-card">
+          <p class="sx-eyebrow" style="text-transform:none; letter-spacing:0">Simulated merchant</p>
+          <div class="merchant-preview">
+            <iframe id="merchantFrame" src="fictional-merchant.html" title="Fictional merchant"></iframe>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script type="module">
+    import { applyI18n, detectLang, toggleLang } from './i18n.mjs';
+    applyI18n(document, detectLang());
+    document.getElementById('langBtn')?.addEventListener('click', () => toggleLang(document));
+    window.showToast = (message) => {
+      let el = document.querySelector('.sn-toast');
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'sn-toast';
+        el.setAttribute('role', 'status');
+        document.body.appendChild(el);
+      }
+      el.textContent = message;
+      el.classList.add('is-visible');
+      clearTimeout(el._timer);
+      el._timer = setTimeout(() => el.classList.remove('is-visible'), 4000);
+    };
+  </script>
+  <script>
+    let currentStep = 1;
+    const totalSteps = 6;
+    let merchantWindowOpened = false;
+
+    function init() {
+      const expiry = new Date();
+      expiry.setDate(expiry.getDate() + 7);
+      document.getElementById('mandateExpiry').textContent = expiry.toLocaleDateString();
+      updateProgress();
+    }
+
+    function updateProgress() {
+      const progress = ((currentStep - 1) / totalSteps) * 100;
+      document.getElementById('overallProgress').style.width = progress + '%';
+    }
+
+    function completeStep(step) {
+      document.getElementById(`step${step}`).classList.add('hidden');
+      document.getElementById(`step${step}Number`).classList.add('completed');
+
+      currentStep = step + 1;
+      if (currentStep <= totalSteps) {
+        document.getElementById(`step${currentStep}`).classList.remove('hidden');
+        document.getElementById(`step${currentStep}Number`).classList.remove('pending');
+      } else {
+        document.getElementById('stepSuccess').classList.remove('hidden');
+        const conf = document.getElementById('confirmationId').value.trim();
+        if (conf) document.getElementById('finalConfirmation').textContent = conf;
+      }
+
+      updateProgress();
+      const target = document.getElementById(currentStep <= totalSteps ? `step${currentStep}` : 'stepSuccess');
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    function openMerchant() {
+      if (!merchantWindowOpened) {
+        window.open('fictional-merchant.html', '_blank');
+        merchantWindowOpened = true;
+        document.getElementById('step2Confirm').disabled = false;
+      }
+    }
+
+    function showHint(step) {
+      if (step === 3) {
+        const el = document.getElementById('hintCallout');
+        el.textContent = 'Hint: Look at the bottom of the account screen for small text saying "Need to cancel your subscription?" — it\'s designed to be easy to miss!';
+        el.classList.remove('hidden');
+      }
+    }
+
+    function rejectOffer() {
+      if (window.showToast) window.showToast('Good choice. Sticking with your decision.');
+      completeStep(4);
+    }
+
+    function acceptOffer() {
+      const el = document.getElementById('rescopeCallout');
+      el.textContent = 'Mandate scope changed. Accepting a retention offer would need re-approval before anything else runs.';
+      el.classList.remove('hidden');
+    }
+
+    window.completeStep = completeStep;
+    window.openMerchant = openMerchant;
+    window.showHint = showHint;
+    window.rejectOffer = rejectOffer;
+    window.acceptOffer = acceptOffer;
+    window.onload = init;
+  </script>
+</body>
+</html>
